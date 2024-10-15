@@ -39,6 +39,7 @@ export const tableRowHeaderBackground = colorPalette.navy700;
 export const tableRowHeaderText = colorPalette.navy150;
 
 export const sidebarBackground = colorPalette.navy900;
+export const sidebarItemBackgroundPending = colorPalette.orange200;
 export const sidebarItemBackgroundPositive = colorPalette.green500;
 export const sidebarItemBackgroundFailed = colorPalette.red300;
 export const sidebarItemAccentSelected = colorPalette.purple200;
@@ -46,20 +47,21 @@ export const sidebarItemBackgroundHover = colorPalette.navy700;
 export const sidebarItemText = colorPalette.navy150;
 export const sidebarItemTextSelected = colorPalette.purple200;
 
-export const menuBackground = colorPalette.navy600;
-export const menuItemBackground = colorPalette.navy600;
+export const menuBackground = colorPalette.navy800;
+export const menuItemBackground = colorPalette.navy800;
 export const menuItemBackgroundHover = colorPalette.navy500;
 export const menuItemText = colorPalette.navy100;
 export const menuItemTextHover = colorPalette.navy50;
 export const menuItemTextSelected = colorPalette.purple400;
-export const menuItemTextHeader = colorPalette.purple500;
-export const menuBorder = colorPalette.navy800;
+export const menuItemTextHeader = colorPalette.purple200;
+export const menuBorder = colorPalette.navy900;
 export const menuBorderHover = colorPalette.purple400;
-export const menuKeybindingText = colorPalette.navy500;
+export const menuKeybindingText = colorPalette.purple200;
 export const menuAutoCompleteBackground = colorPalette.navy900;
 export const menuAutoCompleteBackgroundHover = colorPalette.navy600;
 export const menuAutoCompleteText = colorPalette.navy200;
 export const menuAutoCompleteTextHeader = colorPalette.purple200;
+export const menuAutoCompleteItemText = menuItemText;
 
 export const modalBackground = colorPalette.gray800;
 export const modalBorder = colorPalette.navy600;
@@ -73,8 +75,7 @@ export const mobileNavItem = colorPalette.navy150;
 export const mobileNavItemSelected = colorPalette.purple400;
 export const mobileAccountShadow = cardShadow;
 export const mobileAccountText = colorPalette.blue800;
-export const mobileModalBackground = colorPalette.navy900;
-export const mobileModalText = colorPalette.white;
+export const mobileTransactionSelected = colorPalette.purple400;
 
 // Mobile view themes (for the top bar)
 export const mobileViewTheme = mobileHeaderBackground;
@@ -149,7 +150,7 @@ export const errorBackground = colorPalette.red800;
 export const errorText = colorPalette.red200;
 export const errorTextDark = colorPalette.red150;
 export const errorTextDarker = errorTextDark;
-export const errorTextMenu = colorPalette.red500;
+export const errorTextMenu = colorPalette.red200;
 export const errorBorder = colorPalette.red500;
 export const upcomingBackground = colorPalette.purple700;
 export const upcomingText = colorPalette.purple100;
@@ -175,6 +176,8 @@ export const checkboxBackgroundSelected = colorPalette.purple300;
 export const checkboxBorderSelected = colorPalette.purple300;
 export const checkboxShadowSelected = colorPalette.purple500;
 export const checkboxToggleBackground = colorPalette.gray700;
+export const checkboxToggleBackgroundSelected = colorPalette.purple300;
+export const checkboxToggleDisabled = colorPalette.gray400;
 
 export const pillBackground = colorPalette.navy800;
 export const pillBackgroundLight = colorPalette.navy900;
@@ -185,8 +188,28 @@ export const pillBorderDark = pillBorder;
 export const pillBackgroundSelected = colorPalette.purple600;
 export const pillTextSelected = colorPalette.navy150;
 export const pillBorderSelected = colorPalette.purple400;
+export const pillTextSubdued = colorPalette.navy500;
 
 export const reportsRed = colorPalette.red300;
 export const reportsBlue = colorPalette.blue400;
+export const reportsGreen = colorPalette.green400;
+export const reportsGray = colorPalette.gray400;
 export const reportsLabel = pageText;
 export const reportsInnerLabel = colorPalette.navy800;
+
+export const noteTagBackground = colorPalette.purple700;
+export const noteTagBackgroundHover = colorPalette.purple500;
+export const noteTagText = colorPalette.purple100;
+
+export const budgetOtherMonth = colorPalette.navy900;
+export const budgetCurrentMonth = tableBackground;
+export const budgetHeaderOtherMonth = colorPalette.navy800;
+export const budgetHeaderCurrentMonth = tableHeaderBackground;
+
+export const floatingActionBarBackground = colorPalette.purple800;
+export const floatingActionBarBorder = floatingActionBarBackground;
+export const floatingActionBarText = colorPalette.navy150;
+
+export const tooltipText = colorPalette.navy100;
+export const tooltipBackground = colorPalette.navy800;
+export const tooltipBorder = colorPalette.navy700;

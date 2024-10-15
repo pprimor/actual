@@ -1,5 +1,5 @@
-// @ts-strict-ignore
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { css } from 'glamor';
 import {
@@ -13,19 +13,19 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 
-import { usePrivacyMode } from 'loot-core/src/client/privacy';
 import {
   amountToCurrency,
   amountToCurrencyNoDecimal,
 } from 'loot-core/src/shared/util';
-import { type GroupedEntity } from 'loot-core/src/types/models/reports';
+import {
+  type balanceTypeOpType,
+  type DataEntity,
+} from 'loot-core/src/types/models/reports';
 
-import { theme } from '../../../style';
-import { type CSSProperties } from '../../../style';
+import { usePrivacyMode } from '../../../hooks/usePrivacyMode';
+import { theme, type CSSProperties } from '../../../style';
 import { AlignedText } from '../../common/AlignedText';
-import { PrivacyFilter } from '../../PrivacyFilter';
 import { Container } from '../Container';
-import { numberFormatterTooltip } from '../numberFormatter';
 
 import { adjustTextSize } from './adjustTextSize';
 import { renderCustomLabel } from './renderCustomLabel';
@@ -35,6 +35,8 @@ type PayloadItem = {
     date: string;
     totalAssets: number | string;
     totalDebts: number | string;
+    netAssets: number | string;
+    netDebts: number | string;
     totalTotals: number | string;
   };
 };
@@ -42,7 +44,7 @@ type PayloadItem = {
 type CustomTooltipProps = {
   active?: boolean;
   payload?: PayloadItem[];
-  balanceTypeOp?: string;
+  balanceTypeOp: balanceTypeOpType;
 };
 
 const CustomTooltip = ({
@@ -50,6 +52,8 @@ const CustomTooltip = ({
   payload,
   balanceTypeOp,
 }: CustomTooltipProps) => {
+  const { t } = useTranslation();
+
   if (active && payload && payload.length) {
     return (
       <div
@@ -68,56 +72,88 @@ const CustomTooltip = ({
             <strong>{payload[0].payload.date}</strong>
           </div>
           <div style={{ lineHeight: 1.5 }}>
-            <PrivacyFilter>
-              {['totalAssets', 'totalTotals'].includes(balanceTypeOp) && (
-                <AlignedText
-                  left="Assets:"
-                  right={amountToCurrency(payload[0].payload.totalAssets)}
-                />
-              )}
-              {['totalDebts', 'totalTotals'].includes(balanceTypeOp) && (
-                <AlignedText
-                  left="Debt:"
-                  right={amountToCurrency(payload[0].payload.totalDebts)}
-                />
-              )}
-              {['totalTotals'].includes(balanceTypeOp) && (
-                <AlignedText
-                  left="Net:"
-                  right={
-                    <strong>
-                      {amountToCurrency(payload[0].payload.totalTotals)}
-                    </strong>
-                  }
-                />
-              )}
-            </PrivacyFilter>
+            {['totalAssets', 'totalTotals'].includes(balanceTypeOp) && (
+              <AlignedText
+                left={t('Assets:')}
+                right={amountToCurrency(payload[0].payload.totalAssets)}
+              />
+            )}
+            {['totalDebts', 'totalTotals'].includes(balanceTypeOp) && (
+              <AlignedText
+                left={t('Debts:')}
+                right={amountToCurrency(payload[0].payload.totalDebts)}
+              />
+            )}
+            {['netAssets'].includes(balanceTypeOp) && (
+              <AlignedText
+                left={t('Net Assets:')}
+                right={amountToCurrency(payload[0].payload.netAssets)}
+              />
+            )}
+            {['netDebts'].includes(balanceTypeOp) && (
+              <AlignedText
+                left={t('Net Debts:')}
+                right={amountToCurrency(payload[0].payload.netDebts)}
+              />
+            )}
+            {['totalTotals'].includes(balanceTypeOp) && (
+              <AlignedText
+                left={t('Net:')}
+                right={
+                  <strong>
+                    {amountToCurrency(payload[0].payload.totalTotals)}
+                  </strong>
+                }
+              />
+            )}
           </div>
         </div>
       </div>
     );
   }
+
+  return <div />;
 };
 
-const customLabel = (props, width, end) => {
+type PropsItem = {
+  index?: number;
+  x?: string | number;
+  y?: string | number;
+  value?: string | number;
+  width?: string | number;
+};
+
+const customLabel = ({
+  props,
+  width,
+  end,
+}: {
+  props: PropsItem;
+  width: number;
+  end: number;
+}) => {
   //Add margin to first and last object
   const calcX =
-    props.x + (props.index === end ? -10 : props.index === 0 ? 5 : 0);
-  const calcY = props.y - (props.value > 0 ? 10 : -10);
+    (typeof props.x === 'number' ? props.x : 0) +
+    (props.index === end ? -10 : props.index === 0 ? 5 : 0);
+  const calcY =
+    (typeof props.y === 'number' ? props.y : 0) -
+    ((typeof props.value === 'number' ? props.value : 0) > 0 ? 10 : -10);
   const textAnchor = props.index === 0 ? 'left' : 'middle';
   const display =
-    props.value !== 0 && `${amountToCurrencyNoDecimal(props.value)}`;
-  const textSize = adjustTextSize(width, 'area');
+    props.value !== 0 ? `${amountToCurrencyNoDecimal(props.value)}` : '';
+  const textSize = adjustTextSize({ sized: width, type: 'area' });
 
   return renderCustomLabel(calcX, calcY, textAnchor, display, textSize);
 };
 
 type AreaGraphProps = {
   style?: CSSProperties;
-  data: GroupedEntity;
-  balanceTypeOp: string;
+  data: DataEntity;
+  balanceTypeOp: balanceTypeOpType;
   compact?: boolean;
   viewLabels: boolean;
+  showTooltip?: boolean;
 };
 
 export function AreaGraph({
@@ -126,10 +162,11 @@ export function AreaGraph({
   balanceTypeOp,
   compact,
   viewLabels,
+  showTooltip = true,
 }: AreaGraphProps) {
   const privacyMode = usePrivacyMode();
-  const dataMax = Math.max(...data.monthData.map(i => i[balanceTypeOp]));
-  const dataMin = Math.min(...data.monthData.map(i => i[balanceTypeOp]));
+  const dataMax = Math.max(...data.intervalData.map(i => i[balanceTypeOp]));
+  const dataMin = Math.min(...data.intervalData.map(i => i[balanceTypeOp]));
 
   const labelsMargin = viewLabels ? 30 : 0;
   const dataDiff = dataMax - dataMin;
@@ -147,9 +184,9 @@ export function AreaGraph({
     dataMax === 0 || Math.abs(dataMax) <= extendRangeAmount
       ? 0
       : Math.ceil((dataMax + extendRangeAmount) / 100) * 100;
-  const lastLabel = data.monthData.length - 1;
+  const lastLabel = data.intervalData.length - 1;
 
-  const tickFormatter = tick => {
+  const tickFormatter = (tick: number) => {
     if (!privacyMode) return `${amountToCurrencyNoDecimal(tick)}`; // Formats the tick values as strings with commas
     return '...';
   };
@@ -176,19 +213,19 @@ export function AreaGraph({
       }}
     >
       {(width, height) =>
-        data.monthData && (
+        data.intervalData && (
           <ResponsiveContainer>
             <div>
               {!compact && <div style={{ marginTop: '15px' }} />}
               <AreaChart
                 width={width}
                 height={height}
-                data={data.monthData}
+                data={data.intervalData}
                 margin={{
                   top: 0,
                   right: labelsMargin,
                   left: leftMargin,
-                  bottom: 0,
+                  bottom: 10,
                 }}
               >
                 {compact ? null : (
@@ -214,13 +251,20 @@ export function AreaGraph({
                     tickSize={0}
                   />
                 )}
-                <Tooltip
-                  content={<CustomTooltip balanceTypeOp={balanceTypeOp} />}
-                  formatter={numberFormatterTooltip}
-                  isAnimationActive={false}
-                />
+                {showTooltip && (
+                  <Tooltip
+                    content={<CustomTooltip balanceTypeOp={balanceTypeOp} />}
+                    isAnimationActive={false}
+                  />
+                )}
                 <defs>
-                  <linearGradient id="splitColor" x1="0" y1="0" x2="0" y2="1">
+                  <linearGradient
+                    id={`fill${balanceTypeOp}`}
+                    x1="0"
+                    y1="0"
+                    x2="0"
+                    y2="1"
+                  >
                     <stop
                       offset={off}
                       stopColor={theme.reportsBlue}
@@ -232,6 +276,24 @@ export function AreaGraph({
                       stopOpacity={0.2}
                     />
                   </linearGradient>
+                  <linearGradient
+                    id={`stroke${balanceTypeOp}`}
+                    x1="0"
+                    y1="0"
+                    x2="0"
+                    y2="1"
+                  >
+                    <stop
+                      offset={off}
+                      stopColor={theme.reportsBlue}
+                      stopOpacity={1}
+                    />
+                    <stop
+                      offset={off}
+                      stopColor={theme.reportsRed}
+                      stopOpacity={1}
+                    />
+                  </linearGradient>
                 </defs>
 
                 <Area
@@ -240,14 +302,16 @@ export function AreaGraph({
                   activeDot={false}
                   animationDuration={0}
                   dataKey={balanceTypeOp}
-                  stroke={theme.reportsBlue}
-                  fill="url(#splitColor)"
+                  stroke={`url(#stroke${balanceTypeOp})`}
+                  fill={`url(#fill${balanceTypeOp})`}
                   fillOpacity={1}
                 >
-                  {viewLabels && (
+                  {viewLabels && !compact && (
                     <LabelList
                       dataKey={balanceTypeOp}
-                      content={e => customLabel(e, width, lastLabel)}
+                      content={props =>
+                        customLabel({ props, width, end: lastLabel })
+                      }
                     />
                   )}
                 </Area>

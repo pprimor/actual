@@ -1,16 +1,13 @@
-// @ts-strict-ignore
 import React, { useState } from 'react';
-import { useSelector } from 'react-redux';
 
 import { format } from 'date-fns';
 
-import { type State } from 'loot-core/client/state-types';
-import { type PrefsState } from 'loot-core/client/state-types/prefs';
 import { send } from 'loot-core/src/platform/client/fetch';
 
+import { useMetadataPref } from '../../hooks/useMetadataPref';
 import { theme } from '../../style';
 import { Block } from '../common/Block';
-import { ButtonWithLoading } from '../common/Button';
+import { ButtonWithLoading } from '../common/Button2';
 import { Text } from '../common/Text';
 
 import { Setting } from './UI';
@@ -18,12 +15,8 @@ import { Setting } from './UI';
 export function ExportBudget() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const budgetId = useSelector<State, PrefsState['local']['id']>(
-    state => state.prefs.local.id,
-  );
-  const encryptKeyId = useSelector<State, PrefsState['local']['encryptKeyId']>(
-    state => state.prefs.local.encryptKeyId,
-  );
+  const [budgetName] = useMetadataPref('budgetName');
+  const [encryptKeyId] = useMetadataPref('encryptKeyId');
 
   async function onExport() {
     setIsLoading(true);
@@ -38,9 +31,9 @@ export function ExportBudget() {
       return;
     }
 
-    window.Actual.saveFile(
+    window.Actual?.saveFile(
       response.data,
-      `${format(new Date(), 'yyyy-MM-dd')}-${budgetId}.zip`,
+      `${format(new Date(), 'yyyy-MM-dd')}-${budgetName}.zip`,
       'Export budget',
     );
     setIsLoading(false);
@@ -50,7 +43,7 @@ export function ExportBudget() {
     <Setting
       primaryAction={
         <>
-          <ButtonWithLoading onClick={onExport} loading={isLoading}>
+          <ButtonWithLoading onPress={onExport} isLoading={isLoading}>
             Export data
           </ButtonWithLoading>
           {error && (

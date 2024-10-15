@@ -1,19 +1,19 @@
 // @ts-strict-ignore
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 import { useSelector } from 'react-redux';
 
-import { type State } from 'loot-core/client/state-types';
-import { type UserState } from 'loot-core/client/state-types/user';
+import { type State } from 'loot-core/src/client/state-types';
 
 import { useActions } from '../hooks/useActions';
 import { theme, styles, type CSSProperties } from '../style';
 
-import { Button } from './common/Button';
+import { Button } from './common/Button2';
 import { Menu } from './common/Menu';
+import { Popover } from './common/Popover';
 import { Text } from './common/Text';
 import { View } from './common/View';
 import { useServerURL } from './ServerContext';
-import { Tooltip } from './tooltips';
 
 type LoggedInUserProps = {
   hideIfNoServer?: boolean;
@@ -25,13 +25,14 @@ export function LoggedInUser({
   style,
   color,
 }: LoggedInUserProps) {
-  const userData = useSelector<State, UserState['data']>(
-    state => state.user.data,
-  );
+  const { t } = useTranslation();
+
+  const userData = useSelector((state: State) => state.user.data);
   const { getUserData, signOut, closeBudget } = useActions();
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
   const serverUrl = useServerURL();
+  const triggerRef = useRef(null);
 
   useEffect(() => {
     getUserData().then(() => setLoading(false));
@@ -66,14 +67,14 @@ export function LoggedInUser({
 
   function serverMessage() {
     if (!serverUrl) {
-      return 'No server';
+      return t('No server');
     }
 
     if (userData?.offline) {
-      return 'Server offline';
+      return t('Server offline');
     }
 
-    return 'Server online';
+    return t('Server online');
   }
 
   if (hideIfNoServer && !serverUrl) {
@@ -90,7 +91,7 @@ export function LoggedInUser({
           ...style,
         }}
       >
-        Connecting...
+        <Trans>Connecting...</Trans>
       </Text>
     );
   }
@@ -98,36 +99,38 @@ export function LoggedInUser({
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', ...style }}>
       <Button
-        type="bare"
-        onClick={() => setMenuOpen(true)}
+        ref={triggerRef}
+        variant="bare"
+        onPress={() => setMenuOpen(true)}
         style={color && { color }}
       >
         {serverMessage()}
       </Button>
 
-      {menuOpen && (
-        <Tooltip
-          position="bottom-right"
-          style={{ padding: 0 }}
-          onClose={() => setMenuOpen(false)}
-        >
-          <Menu
-            onMenuSelect={onMenuSelect}
-            items={[
-              serverUrl &&
-                !userData?.offline && {
-                  name: 'change-password',
-                  text: 'Change password',
-                },
-              serverUrl && { name: 'sign-out', text: 'Sign out' },
-              {
-                name: 'config-server',
-                text: serverUrl ? 'Change server URL' : 'Start using a server',
+      <Popover
+        offset={8}
+        triggerRef={triggerRef}
+        isOpen={menuOpen}
+        onOpenChange={() => setMenuOpen(false)}
+      >
+        <Menu
+          onMenuSelect={onMenuSelect}
+          items={[
+            serverUrl &&
+              !userData?.offline && {
+                name: 'change-password',
+                text: t('Change password'),
               },
-            ]}
-          />
-        </Tooltip>
-      )}
+            serverUrl && { name: 'sign-out', text: t('Sign out') },
+            {
+              name: 'config-server',
+              text: serverUrl
+                ? t('Change server URL')
+                : t('Start using a server'),
+            },
+          ]}
+        />
+      </Popover>
     </View>
   );
 }

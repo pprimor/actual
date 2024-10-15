@@ -1,5 +1,6 @@
 // @ts-strict-ignore
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { css } from 'glamor';
 import {
@@ -13,8 +14,9 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 
-import { theme } from '../../../style';
-import { type CSSProperties } from '../../../style';
+import { amountToCurrencyNoDecimal } from 'loot-core/shared/util';
+
+import { theme, type CSSProperties } from '../../../style';
 import { AlignedText } from '../../common/AlignedText';
 import { PrivacyFilter } from '../../PrivacyFilter';
 import { Container } from '../Container';
@@ -36,6 +38,8 @@ type CustomTooltipProps = {
 };
 
 const CustomTooltip = ({ active, payload }: CustomTooltipProps) => {
+  const { t } = useTranslation();
+
   if (active && payload && payload.length) {
     return (
       <div
@@ -55,10 +59,13 @@ const CustomTooltip = ({ active, payload }: CustomTooltipProps) => {
           </div>
           <div style={{ lineHeight: 1.5 }}>
             <PrivacyFilter>
-              <AlignedText left="Assets:" right={payload[0].payload.assets} />
-              <AlignedText left="Debt:" right={payload[0].payload.debt} />
               <AlignedText
-                left="Change:"
+                left={t('Assets:')}
+                right={payload[0].payload.assets}
+              />
+              <AlignedText left={t('Debt:')} right={payload[0].payload.debt} />
+              <AlignedText
+                left={t('Change:')}
                 right={<strong>{payload[0].payload.change}</strong>}
               />
             </PrivacyFilter>
@@ -71,13 +78,19 @@ const CustomTooltip = ({ active, payload }: CustomTooltipProps) => {
 
 type BarLineGraphProps = {
   style?: CSSProperties;
-  graphData;
+  data;
   compact?: boolean;
+  showTooltip?: boolean;
 };
 
-export function BarLineGraph({ style, graphData, compact }: BarLineGraphProps) {
+export function BarLineGraph({
+  style,
+  data,
+  compact,
+  showTooltip = true,
+}: BarLineGraphProps) {
   const tickFormatter = tick => {
-    return `${Math.round(tick).toLocaleString()}`; // Formats the tick values as strings with commas
+    return `${amountToCurrencyNoDecimal(Math.round(tick))}`; // Formats the tick values as strings with commas
   };
 
   return (
@@ -88,21 +101,23 @@ export function BarLineGraph({ style, graphData, compact }: BarLineGraphProps) {
       }}
     >
       {(width, height) =>
-        graphData && (
+        data && (
           <ResponsiveContainer>
             <div>
               {!compact && <div style={{ marginTop: '15px' }} />}
               <ComposedChart
                 width={width}
                 height={height}
-                data={graphData.data}
+                data={data.data}
                 margin={{ top: 0, right: 0, left: 0, bottom: 0 }}
               >
-                <Tooltip
-                  content={<CustomTooltip />}
-                  formatter={numberFormatterTooltip}
-                  isAnimationActive={false}
-                />
+                {showTooltip && (
+                  <Tooltip
+                    content={<CustomTooltip />}
+                    formatter={numberFormatterTooltip}
+                    isAnimationActive={false}
+                  />
+                )}
                 {!compact && (
                   <>
                     <CartesianGrid strokeDasharray="3 3" />

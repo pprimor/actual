@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect, useReducer } from 'react';
-import { useSelector } from 'react-redux';
+import { FocusScope } from 'react-aria';
+import { Form } from 'react-aria-components';
+import { useHotkeys } from 'react-hotkeys-hook';
+import { Trans, useTranslation } from 'react-i18next';
 
-import { FocusScope } from '@react-aria/focus';
 import {
   parse as parseDate,
   format as formatDate,
@@ -17,19 +19,20 @@ import {
   getFieldError,
   unparse,
   FIELD_TYPES,
-  TYPE_INFO,
+  getValidOps,
 } from 'loot-core/src/shared/rules';
 import { titleFirst } from 'loot-core/src/shared/util';
 
-import { theme } from '../../style';
-import { Button } from '../common/Button';
-import { HoverTarget } from '../common/HoverTarget';
+import { useDateFormat } from '../../hooks/useDateFormat';
+import { styles, theme } from '../../style';
+import { Button } from '../common/Button2';
 import { Menu } from '../common/Menu';
+import { Popover } from '../common/Popover';
 import { Select } from '../common/Select';
 import { Stack } from '../common/Stack';
 import { Text } from '../common/Text';
+import { Tooltip } from '../common/Tooltip';
 import { View } from '../common/View';
-import { Tooltip } from '../tooltips';
 import { GenericInput } from '../util/GenericInput';
 
 import { CompactFiltersButton } from './CompactFiltersButton';
@@ -38,6 +41,8 @@ import { OpButton } from './OpButton';
 import { subfieldFromFilter } from './subfieldFromFilter';
 import { subfieldToOptions } from './subfieldToOptions';
 import { updateFilterReducer } from './updateFilterReducer';
+
+let isDatepickerClick = false;
 
 const filterFields = [
   'date',
@@ -59,6 +64,7 @@ function ConfigureField({
   dispatch,
   onApply,
 }) {
+  const { t } = useTranslation();
   const [subfield, setSubfield] = useState(initialSubfield);
   const inputRef = useRef();
   const prevOp = useRef(null);
@@ -71,7 +77,7 @@ function ConfigureField({
   }, [op]);
 
   const type = FIELD_TYPES.get(field);
-  let ops = TYPE_INFO[type].ops.filter(op => op !== 'isbetween');
+  let ops = getValidOps(field).filter(op => op !== 'isbetween');
 
   // Month and year fields are quite hacky right now! Figure out how
   // to clean this up later
@@ -80,177 +86,170 @@ function ConfigureField({
   }
 
   return (
-    <Tooltip
-      position="bottom-left"
-      style={{ padding: 15, color: theme.menuItemText }}
-      width={275}
-      onClose={() => dispatch({ type: 'close' })}
-      data-testid="filters-menu-tooltip"
-    >
-      <FocusScope>
-        <View style={{ marginBottom: 10 }}>
-          <Stack direction="row" align="flex-start">
-            {field === 'amount' || field === 'date' ? (
-              <Select
-                bare
-                options={
-                  field === 'amount'
+    <FocusScope>
+      <View style={{ marginBottom: 10 }}>
+        <Stack direction="row" align="flex-start">
+          {field === 'amount' || field === 'date' ? (
+            <Select
+              options={
+                field === 'amount'
+                  ? [
+                      ['amount', t('Amount')],
+                      ['amount-inflow', t('Amount (inflow)')],
+                      ['amount-outflow', t('Amount (outflow)')],
+                    ]
+                  : field === 'date'
                     ? [
-                        ['amount', 'Amount'],
-                        ['amount-inflow', 'Amount (inflow)'],
-                        ['amount-outflow', 'Amount (outflow)'],
+                        ['date', t('Date')],
+                        ['month', t('Month')],
+                        ['year', t('Year')],
                       ]
-                    : field === 'date'
-                      ? [
-                          ['date', 'Date'],
-                          ['month', 'Month'],
-                          ['year', 'Year'],
-                        ]
-                      : null
+                    : null
+              }
+              value={subfield}
+              onChange={sub => {
+                setSubfield(sub);
+
+                if (sub === 'month' || sub === 'year') {
+                  dispatch({ type: 'set-op', op: 'is' });
                 }
-                value={subfield}
-                onChange={sub => {
-                  setSubfield(sub);
+              }}
+            />
+          ) : (
+            titleFirst(mapField(field))
+          )}
+          <View style={{ flex: 1 }} />
+        </Stack>
+      </View>
 
-                  if (sub === 'month' || sub === 'year') {
-                    dispatch({ type: 'set-op', op: 'is' });
-                  }
-                }}
-                style={{ borderWidth: 1 }}
-              />
-            ) : (
-              titleFirst(mapField(field))
-            )}
-            <View style={{ flex: 1 }} />
-          </Stack>
-        </View>
+      <View
+        style={{
+          color: theme.pageTextLight,
+          marginBottom: 10,
+        }}
+      >
+        {field === 'saved' && t('Existing filters will be cleared')}
+      </View>
 
-        <View
-          style={{
-            color: theme.pageTextLight,
-            marginBottom: 10,
-          }}
-        >
-          {field === 'saved' && 'Existing filters will be cleared'}
-        </View>
+      <Stack
+        direction="row"
+        align="flex-start"
+        spacing={1}
+        style={{ flexWrap: 'wrap' }}
+      >
+        {type === 'boolean' ? (
+          <>
+            <OpButton
+              key="true"
+              op="true"
+              isSelected={value === true}
+              onPress={() => {
+                dispatch({ type: 'set-op', op: 'is' });
+                dispatch({ type: 'set-value', value: true });
+              }}
+            />
+            <OpButton
+              key="false"
+              op="false"
+              isSelected={value === false}
+              onPress={() => {
+                dispatch({ type: 'set-op', op: 'is' });
+                dispatch({ type: 'set-value', value: false });
+              }}
+            />
+          </>
+        ) : (
+          <>
+            <Stack
+              direction="row"
+              align="flex-start"
+              spacing={1}
+              style={{ flexWrap: 'wrap' }}
+            >
+              {ops.slice(0, 3).map(currOp => (
+                <OpButton
+                  key={currOp}
+                  op={currOp}
+                  isSelected={currOp === op}
+                  onPress={() => dispatch({ type: 'set-op', op: currOp })}
+                />
+              ))}
+            </Stack>
+            <Stack
+              direction="row"
+              align="flex-start"
+              spacing={1}
+              style={{ flexWrap: 'wrap' }}
+            >
+              {ops.slice(3, ops.length).map(currOp => (
+                <OpButton
+                  key={currOp}
+                  op={currOp}
+                  isSelected={currOp === op}
+                  onPress={() => dispatch({ type: 'set-op', op: currOp })}
+                />
+              ))}
+            </Stack>
+          </>
+        )}
+      </Stack>
+
+      <Form
+        onSubmit={e => {
+          e.preventDefault();
+          onApply({
+            field,
+            op,
+            value,
+            options: subfieldToOptions(field, subfield),
+          });
+        }}
+      >
+        {type !== 'boolean' && (
+          <GenericInput
+            inputRef={inputRef}
+            field={field}
+            subfield={subfield}
+            type={
+              type === 'id' &&
+              (op === 'contains' ||
+                op === 'matches' ||
+                op === 'doesNotContain' ||
+                op === 'hasTags')
+                ? 'string'
+                : type
+            }
+            value={value}
+            multi={op === 'oneOf' || op === 'notOneOf'}
+            style={{ marginTop: 10 }}
+            onChange={v => {
+              dispatch({ type: 'set-value', value: v });
+            }}
+          />
+        )}
 
         <Stack
           direction="row"
-          align="flex-start"
-          spacing={1}
-          style={{ flexWrap: 'wrap' }}
+          justify="flex-end"
+          align="center"
+          style={{ marginTop: 15 }}
         >
-          {type === 'boolean' ? (
-            <>
-              <OpButton
-                key="true"
-                op="true"
-                selected={value === true}
-                onClick={() => {
-                  dispatch({ type: 'set-op', op: 'is' });
-                  dispatch({ type: 'set-value', value: true });
-                }}
-              />
-              <OpButton
-                key="false"
-                op="false"
-                selected={value === false}
-                onClick={() => {
-                  dispatch({ type: 'set-op', op: 'is' });
-                  dispatch({ type: 'set-value', value: false });
-                }}
-              />
-            </>
-          ) : (
-            <>
-              <Stack
-                direction="row"
-                align="flex-start"
-                spacing={1}
-                style={{ flexWrap: 'wrap' }}
-              >
-                {ops.slice(0, 3).map(currOp => (
-                  <OpButton
-                    key={currOp}
-                    op={currOp}
-                    selected={currOp === op}
-                    onClick={() => dispatch({ type: 'set-op', op: currOp })}
-                  />
-                ))}
-              </Stack>
-              <Stack
-                direction="row"
-                align="flex-start"
-                spacing={1}
-                style={{ flexWrap: 'wrap' }}
-              >
-                {ops.slice(3, ops.length).map(currOp => (
-                  <OpButton
-                    key={currOp}
-                    op={currOp}
-                    selected={currOp === op}
-                    onClick={() => dispatch({ type: 'set-op', op: currOp })}
-                  />
-                ))}
-              </Stack>
-            </>
-          )}
+          <View style={{ flex: 1 }} />
+          <Button variant="primary" type="submit">
+            <Trans>Apply</Trans>
+          </Button>
         </Stack>
-
-        <form action="#">
-          {type !== 'boolean' && (
-            <GenericInput
-              inputRef={inputRef}
-              field={field}
-              subfield={subfield}
-              type={
-                type === 'id' && (op === 'contains' || op === 'doesNotContain')
-                  ? 'string'
-                  : type
-              }
-              value={value}
-              multi={op === 'oneOf' || op === 'notOneOf'}
-              style={{ marginTop: 10 }}
-              onChange={v => dispatch({ type: 'set-value', value: v })}
-            />
-          )}
-
-          <Stack
-            direction="row"
-            justify="flex-end"
-            align="center"
-            style={{ marginTop: 15 }}
-          >
-            <View style={{ flex: 1 }} />
-            <Button
-              type="primary"
-              onClick={e => {
-                e.preventDefault();
-                onApply({
-                  field,
-                  op,
-                  value,
-                  options: subfieldToOptions(field, subfield),
-                });
-              }}
-            >
-              Apply
-            </Button>
-          </Stack>
-        </form>
-      </FocusScope>
-    </Tooltip>
+      </Form>
+    </FocusScope>
   );
 }
 
-export function FilterButton({ onApply, compact, hover }) {
+export function FilterButton({ onApply, compact, hover, exclude }) {
+  const { t } = useTranslation();
   const filters = useFilters();
+  const triggerRef = useRef(null);
 
-  const { dateFormat } = useSelector(state => {
-    return {
-      dateFormat: state.prefs.local.dateFormat || 'MM/dd/yyyy',
-    };
-  });
+  const dateFormat = useDateFormat() || 'MM/dd/yyyy';
 
   const [state, dispatch] = useReducer(
     (state, action) => {
@@ -260,7 +259,7 @@ export function FilterButton({ onApply, compact, hover }) {
         case 'configure': {
           const { field } = deserializeField(action.field);
           const type = FIELD_TYPES.get(field);
-          const ops = TYPE_INFO[type].ops;
+          const ops = getValidOps(field);
           return {
             ...state,
             fieldsOpen: false,
@@ -292,7 +291,7 @@ export function FilterButton({ onApply, compact, hover }) {
         if (isDateValid(date)) {
           cond.value = formatDate(date, 'yyyy-MM');
         } else {
-          alert('Invalid date format');
+          alert(t('Invalid date format'));
           return;
         }
       } else if (cond.options.year) {
@@ -300,7 +299,7 @@ export function FilterButton({ onApply, compact, hover }) {
         if (isDateValid(date)) {
           cond.value = formatDate(date, 'yyyy');
         } else {
-          alert('Invalid date format');
+          alert(t('Invalid date format'));
           return;
         }
       }
@@ -323,62 +322,95 @@ export function FilterButton({ onApply, compact, hover }) {
       dispatch({ type: 'close' });
     }
   }
+  useHotkeys('f', () => dispatch({ type: 'select-field' }), {
+    scopes: ['app'],
+  });
 
   return (
     <View>
-      <HoverTarget
-        style={{ flexShrink: 0 }}
-        renderContent={() =>
-          hover && (
-            <Tooltip
-              position="bottom-left"
-              style={{
-                lineHeight: 1.5,
-                padding: '6px 10px',
-                backgroundColor: theme.menuBackground,
-                color: theme.menuItemText,
-              }}
-            >
-              <Text>Filters</Text>
-            </Tooltip>
-          )
-        }
-      >
-        {compact ? (
-          <CompactFiltersButton
-            onClick={() => dispatch({ type: 'select-field' })}
-          />
-        ) : (
-          <FiltersButton onClick={() => dispatch({ type: 'select-field' })} />
-        )}
-      </HoverTarget>
-      {state.fieldsOpen && (
+      <View ref={triggerRef}>
         <Tooltip
-          position="bottom-left"
-          style={{ padding: 0 }}
-          onClose={() => dispatch({ type: 'close' })}
-          data-testid="filters-select-tooltip"
+          style={{
+            ...styles.tooltip,
+            lineHeight: 1.5,
+            padding: '6px 10px',
+          }}
+          content={
+            <Text>
+              <Trans>Filters</Trans>
+            </Text>
+          }
+          placement="bottom start"
+          triggerProps={{
+            isDisabled: !hover,
+          }}
         >
-          <Menu
-            onMenuSelect={name => {
-              dispatch({ type: 'configure', field: name });
-            }}
-            items={filterFields.map(([name, text]) => ({
+          {compact ? (
+            <CompactFiltersButton
+              onPress={() => dispatch({ type: 'select-field' })}
+            />
+          ) : (
+            <FiltersButton onPress={() => dispatch({ type: 'select-field' })} />
+          )}
+        </Tooltip>
+      </View>
+
+      <Popover
+        triggerRef={triggerRef}
+        placement="bottom start"
+        isOpen={state.fieldsOpen}
+        onOpenChange={() => dispatch({ type: 'close' })}
+        data-testid="filters-select-tooltip"
+      >
+        <Menu
+          onMenuSelect={name => {
+            dispatch({ type: 'configure', field: name });
+          }}
+          items={filterFields
+            .filter(f => (exclude ? !exclude.includes(f[0]) : true))
+            .sort()
+            .map(([name, text]) => ({
               name,
               text: titleFirst(text),
             }))}
-          />
-        </Tooltip>
-      )}
-      {state.condOpen && (
-        <ConfigureField
-          field={state.field}
-          op={state.op}
-          value={state.value}
-          dispatch={dispatch}
-          onApply={onValidateAndApply}
         />
-      )}
+      </Popover>
+
+      <Popover
+        triggerRef={triggerRef}
+        placement="bottom start"
+        isOpen={state.condOpen}
+        onOpenChange={() => {
+          dispatch({ type: 'close' });
+        }}
+        shouldCloseOnInteractOutside={element => {
+          // Datepicker selections for some reason register 2x clicks
+          // We want to keep the popover open after selecting a date.
+          // So we ignore the "close" event on selection + the subsequent event.
+          if (element.dataset.pikaYear) {
+            isDatepickerClick = true;
+            return false;
+          }
+          if (isDatepickerClick) {
+            isDatepickerClick = false;
+            return false;
+          }
+
+          return true;
+        }}
+        style={{ width: 275, padding: 15, color: theme.menuItemText }}
+        data-testid="filters-menu-tooltip"
+      >
+        {state.field && (
+          <ConfigureField
+            field={state.field}
+            op={state.op}
+            value={state.value}
+            dispatch={dispatch}
+            onApply={onValidateAndApply}
+          />
+        )}
+      </Popover>
     </View>
   );
 }

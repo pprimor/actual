@@ -1,11 +1,12 @@
-// @ts-strict-ignore
-import React, { useState } from 'react';
+import React, { useState, type ReactNode } from 'react';
+import { useTranslation, Trans } from 'react-i18next';
+
+import { LazyLoadFailedError } from 'loot-core/src/shared/errors';
 
 import { Block } from './common/Block';
-import { Button } from './common/Button';
-import { ExternalLink } from './common/ExternalLink';
-import { LinkButton } from './common/LinkButton';
-import { Modal } from './common/Modal';
+import { Button } from './common/Button2';
+import { Link } from './common/Link';
+import { Modal, ModalHeader } from './common/Modal';
 import { Paragraph } from './common/Paragraph';
 import { Stack } from './common/Stack';
 import { Text } from './common/Text';
@@ -16,27 +17,28 @@ type AppError = Error & {
   type?: string;
   IDBFailure?: boolean;
   SharedArrayBufferMissing?: boolean;
+  BackendInitFailure?: boolean;
 };
 
 type FatalErrorProps = {
-  buttonText: string;
   error: Error | AppError;
 };
 
-type RenderSimpleProps = {
-  error: Error | AppError;
-};
+type RenderSimpleProps = FatalErrorProps;
 
 function RenderSimple({ error }: RenderSimpleProps) {
-  let msg;
+  let msg: ReactNode;
+
   if ('IDBFailure' in error && error.IDBFailure) {
     // IndexedDB wasn't able to open the database
     msg = (
       <Text>
-        Your browser doesn’t support IndexedDB in this environment, a feature
-        that Actual requires to run. This might happen if you are in private
-        browsing mode. Please try a different browser or turn off private
-        browsing.
+        <Trans>
+          Your browser doesn’t support IndexedDB in this environment, a feature
+          that Actual requires to run. This might happen if you are in private
+          browsing mode. Please try a different browser or turn off private
+          browsing.
+        </Trans>
       </Text>
     );
   } else if (
@@ -46,17 +48,20 @@ function RenderSimple({ error }: RenderSimpleProps) {
     // SharedArrayBuffer isn't available
     msg = (
       <Text>
-        Actual requires access to <code>SharedArrayBuffer</code> in order to
-        function properly. If you’re seeing this error, either your browser does
-        not support <code>SharedArrayBuffer</code>, or your server is not
-        sending the appropriate headers, or you are not using HTTPS. See{' '}
-        <ExternalLink
-          linkColor="muted"
-          to="https://actualbudget.org/docs/troubleshooting/shared-array-buffer"
-        >
-          our troubleshooting documentation
-        </ExternalLink>{' '}
-        to learn more. <SharedArrayBufferOverride />
+        <Trans>
+          Actual requires access to <code>SharedArrayBuffer</code> in order to
+          function properly. If you’re seeing this error, either your browser
+          does not support <code>SharedArrayBuffer</code>, or your server is not
+          sending the appropriate headers, or you are not using HTTPS. See{' '}
+          <Link
+            variant="external"
+            linkColor="muted"
+            to="https://actualbudget.org/docs/troubleshooting/shared-array-buffer"
+          >
+            our troubleshooting documentation
+          </Link>{' '}
+          to learn more. <SharedArrayBufferOverride />
+        </Trans>
       </Text>
     );
   } else {
@@ -65,15 +70,9 @@ function RenderSimple({ error }: RenderSimpleProps) {
     // screen
     msg = (
       <Text>
-        There was a problem loading the app in this browser version. If this
-        continues to be a problem, you can{' '}
-        <ExternalLink
-          linkColor="muted"
-          to="https://github.com/actualbudget/releases"
-        >
-          download the desktop app
-        </ExternalLink>
-        .
+        <Trans>
+          There was a problem loading the app in this browser version.
+        </Trans>
       </Text>
     );
   }
@@ -88,11 +87,38 @@ function RenderSimple({ error }: RenderSimpleProps) {
     >
       <Text>{msg}</Text>
       <Text>
-        Please get{' '}
-        <ExternalLink linkColor="muted" to="https://actualbudget.org/contact">
-          in touch
-        </ExternalLink>{' '}
-        for support
+        <Trans>
+          Please get{' '}
+          <Link
+            variant="external"
+            linkColor="muted"
+            to="https://actualbudget.org/contact"
+          >
+            in touch
+          </Link>{' '}
+          for support
+        </Trans>
+      </Text>
+    </Stack>
+  );
+}
+
+function RenderLazyLoadError() {
+  return (
+    <Stack
+      style={{
+        paddingBottom: 15,
+        lineHeight: '1.5em',
+        fontSize: 15,
+      }}
+    >
+      <Text>
+        <Trans>
+          There was a problem loading one of the chunks of the application.
+          Please reload the page and try again. If the issue persists - there
+          might be an issue with either your internet connection and/or the
+          server where the app is hosted.
+        </Trans>
       </Text>
     </Stack>
   );
@@ -101,13 +127,17 @@ function RenderSimple({ error }: RenderSimpleProps) {
 function RenderUIError() {
   return (
     <>
-      <Paragraph>There was an unrecoverable error in the UI. Sorry!</Paragraph>
       <Paragraph>
-        If this error persists, please get{' '}
-        <ExternalLink to="https://actualbudget.org/contact">
-          in touch
-        </ExternalLink>{' '}
-        so it can be investigated.
+        <Trans>There was an unrecoverable error in the UI. Sorry!</Trans>
+      </Paragraph>
+      <Paragraph>
+        <Trans>
+          If this error persists, please get{' '}
+          <Link variant="external" to="https://actualbudget.org/contact">
+            in touch
+          </Link>{' '}
+          so it can be investigated.
+        </Trans>
       </Paragraph>
     </>
   );
@@ -120,11 +150,13 @@ function SharedArrayBufferOverride() {
   return expanded ? (
     <>
       <Paragraph style={{ marginTop: 10 }}>
-        Actual uses <code>SharedArrayBuffer</code> to allow usage from multiple
-        tabs at once and to ensure correct behavior when switching files. While
-        it can run without access to <code>SharedArrayBuffer</code>, you may
-        encounter data loss or notice multiple budget files being merged with
-        each other.
+        <Trans>
+          Actual uses <code>SharedArrayBuffer</code> to allow usage from
+          multiple tabs at once and to ensure correct behavior when switching
+          files. While it can run without access to
+          <code>SharedArrayBuffer</code>, you may encounter data loss or notice
+          multiple budget files being merged with each other.
+        </Trans>
       </Paragraph>
       <label
         style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}
@@ -133,43 +165,66 @@ function SharedArrayBufferOverride() {
           checked={understand}
           onChange={() => setUnderstand(!understand)}
         />{' '}
-        I understand the risks, run Actual in the unsupported fallback mode
+        <Trans>
+          I understand the risks, run Actual in the unsupported fallback mode
+        </Trans>
       </label>
       <Button
-        disabled={!understand}
-        onClick={() => {
+        isDisabled={!understand}
+        onPress={() => {
           window.localStorage.setItem('SharedArrayBufferOverride', 'true');
           window.location.reload();
         }}
       >
-        Open Actual
+        <Trans>Open Actual</Trans>
       </Button>
     </>
   ) : (
-    <LinkButton onClick={() => setExpanded(true)} style={{ marginLeft: 5 }}>
-      Advanced options
-    </LinkButton>
+    <Link
+      variant="text"
+      onClick={() => setExpanded(true)}
+      style={{ marginLeft: 5 }}
+    >
+      <Trans>Advanced options</Trans>
+    </Link>
   );
 }
 
-export function FatalError({ buttonText, error }: FatalErrorProps) {
+export function FatalError({ error }: FatalErrorProps) {
+  const { t } = useTranslation();
+
   const [showError, setShowError] = useState(false);
 
   const showSimpleRender = 'type' in error && error.type === 'app-init-failure';
+  const isLazyLoadError = error instanceof LazyLoadFailedError;
 
   return (
-    <Modal isCurrent={true} showClose={false} title="Fatal Error">
+    <Modal name="fatal-error" isDismissable={false}>
+      <ModalHeader
+        title={isLazyLoadError ? t('Loading Error') : t('Fatal Error')}
+      />
       <View
         style={{
           maxWidth: 500,
         }}
       >
-        {showSimpleRender ? <RenderSimple error={error} /> : <RenderUIError />}
+        {isLazyLoadError ? (
+          <RenderLazyLoadError />
+        ) : showSimpleRender ? (
+          <RenderSimple error={error} />
+        ) : (
+          <RenderUIError />
+        )}
+
         <Paragraph>
-          <Button onClick={() => window.Actual.relaunch()}>{buttonText}</Button>
+          <Button onPress={() => window.Actual?.relaunch()}>
+            <Trans>Restart app</Trans>
+          </Button>
         </Paragraph>
         <Paragraph isLast={true} style={{ fontSize: 11 }}>
-          <LinkButton onClick={() => setShowError(true)}>Show Error</LinkButton>
+          <Link variant="text" onClick={() => setShowError(state => !state)}>
+            <Trans>Show Error</Trans>
+          </Link>
           {showError && (
             <Block
               style={{

@@ -8,16 +8,19 @@ export function getStatus(
   nextDate: string,
   completed: boolean,
   hasTrans: boolean,
+  upcomingLength: string,
 ) {
   const today = monthUtils.currentDay();
-
   if (completed) {
     return 'completed';
   } else if (hasTrans) {
     return 'paid';
   } else if (nextDate === today) {
     return 'due';
-  } else if (nextDate > today && nextDate <= monthUtils.addDays(today, 7)) {
+  } else if (
+    nextDate > today &&
+    nextDate <= monthUtils.addDays(today, parseInt(upcomingLength ?? '7'))
+  ) {
     return 'upcoming';
   } else if (nextDate < today) {
     return 'missed';
@@ -43,7 +46,7 @@ export function getHasTransactionsQuery(schedules) {
   });
 
   return q('transactions')
-    .options({ splits: 'grouped' })
+    .options({ splits: 'all' })
     .filter({ $or: filters })
     .orderBy({ date: 'desc' })
     .select(['schedule', 'date']);

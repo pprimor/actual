@@ -12,8 +12,7 @@ import {
   SvgViewHide,
   SvgViewShow,
 } from '../../icons/v2';
-import { type CategoryListProps } from '../autocomplete/CategoryAutocomplete';
-import { Button } from '../common/Button';
+import { Button } from '../common/Button2';
 import { Text } from '../common/Text';
 import { View } from '../common/View';
 import { Checkbox } from '../forms';
@@ -22,8 +21,8 @@ import { GraphButton } from './GraphButton';
 
 type CategorySelectorProps = {
   categoryGroups: Array<CategoryGroupEntity>;
-  selectedCategories: CategoryListProps['items'];
-  setSelectedCategories: (selectedCategories: CategoryEntity[]) => null;
+  selectedCategories: CategoryEntity[];
+  setSelectedCategories: (selectedCategories: CategoryEntity[]) => void;
   showHiddenCategories?: boolean;
 };
 
@@ -45,10 +44,15 @@ export function CategorySelector({
     filteredGroup(categoryGroup).map(category => selectAll.push(category)),
   );
 
+  if (selectedCategories === undefined) {
+    selectedCategories = categoryGroups.flatMap(cg => cg.categories);
+  }
+
   const selectedCategoryMap = useMemo(
     () => selectedCategories.map(selected => selected.id),
     [selectedCategories],
   );
+
   const allCategoriesSelected = selectAll.every(category =>
     selectedCategoryMap.includes(category.id),
   );
@@ -68,8 +72,8 @@ export function CategorySelector({
         }}
       >
         <Button
-          type="bare"
-          onClick={() => setUncheckedHidden(state => !state)}
+          variant="bare"
+          onPress={() => setUncheckedHidden(state => !state)}
           style={{ padding: 8 }}
         >
           <View>

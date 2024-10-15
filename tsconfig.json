@@ -31,7 +31,7 @@
     "noEmit": true,
     "paths": {
       // until we turn on composite/references
-      "loot-core/*": ["./packages/loot-core/src/*"],
+      "loot-core/*": ["./packages/loot-core/src/*"]
     },
     "plugins": [
       {
@@ -41,7 +41,16 @@
     ]
   },
   "include": ["packages/**/*"],
-  "exclude": ["**/node_modules/*", "**/build/*", "**/lib-dist/*"],
+  "exclude": [
+    "node_modules",
+    "**/node_modules/*",
+    "**/build/*",
+    "**/client-build/*",
+    "**/dist/*",
+    "**/lib-dist/*",
+    "**/test-results/*",
+    "**/playwright-report/*"
+  ],
   "ts-node": {
     "compilerOptions": {
       "module": "CommonJS"

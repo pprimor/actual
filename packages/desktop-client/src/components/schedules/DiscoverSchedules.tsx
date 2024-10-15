@@ -1,16 +1,14 @@
 // @ts-strict-ignore
 import React, { useState } from 'react';
-import { useSelector } from 'react-redux';
+import { Trans, useTranslation } from 'react-i18next';
 
-import { type State } from 'loot-core/client/state-types';
-import { type PrefsState } from 'loot-core/client/state-types/prefs';
 import { runQuery } from 'loot-core/src/client/query-helpers';
 import { send } from 'loot-core/src/platform/client/fetch';
 import { q } from 'loot-core/src/shared/query';
 import { getRecurringDescription } from 'loot-core/src/shared/schedules';
 import type { DiscoverScheduleEntity } from 'loot-core/src/types/models';
 
-import type { BoundActions } from '../../hooks/useActions';
+import { useDateFormat } from '../../hooks/useDateFormat';
 import {
   useSelected,
   useSelectedDispatch,
@@ -19,12 +17,11 @@ import {
 } from '../../hooks/useSelected';
 import { useSendPlatformRequest } from '../../hooks/useSendPlatformRequest';
 import { theme } from '../../style';
-import { ButtonWithLoading } from '../common/Button';
-import { Modal } from '../common/Modal';
+import { ButtonWithLoading } from '../common/Button2';
+import { Modal, ModalCloseButton, ModalHeader } from '../common/Modal';
 import { Paragraph } from '../common/Paragraph';
 import { Stack } from '../common/Stack';
 import { View } from '../common/View';
-import { type CommonModalProps } from '../Modals';
 import { Table, TableHeader, Row, Field, SelectCell } from '../table';
 import { DisplayId } from '../util/DisplayId';
 
@@ -39,11 +36,11 @@ function DiscoverSchedulesTable({
   schedules: DiscoverScheduleEntity[];
   loading: boolean;
 }) {
+  const { t } = useTranslation();
+
   const selectedItems = useSelectedItems();
   const dispatchSelected = useSelectedDispatch();
-  const dateFormat = useSelector<State, PrefsState['local']['dateFormat']>(
-    state => state.prefs.local.dateFormat || 'MM/dd/yyyy',
-  );
+  const dateFormat = useDateFormat() || 'MM/dd/yyyy';
 
   function renderItem({ item }: { item: DiscoverScheduleEntity }) {
     const selected = selectedItems.has(item.id);
@@ -55,7 +52,11 @@ function DiscoverSchedulesTable({
         height={ROW_HEIGHT}
         inset={15}
         onClick={e => {
-          dispatchSelected({ type: 'select', id: item.id, event: e });
+          dispatchSelected({
+            type: 'select',
+            id: item.id,
+            isRangeSelect: e.shiftKey,
+          });
         }}
         style={{
           borderColor: selected ? theme.tableBorderSelected : theme.tableBorder,
@@ -77,7 +78,11 @@ function DiscoverSchedulesTable({
           focused={false}
           selected={selected}
           onSelect={e => {
-            dispatchSelected({ type: 'select', id: item.id, event: e });
+            dispatchSelected({
+              type: 'select',
+              id: item.id,
+              isRangeSelect: e.shiftKey,
+            });
           }}
         />
         <Field width="flex">
@@ -101,15 +106,21 @@ function DiscoverSchedulesTable({
           exposed={!loading}
           focused={false}
           selected={selectedItems.size > 0}
-          onSelect={e => dispatchSelected({ type: 'select-all', event: e })}
+          onSelect={e =>
+            dispatchSelected({ type: 'select-all', isRangeSelect: e.shiftKey })
+          }
         />
-        <Field width="flex">Payee</Field>
-        <Field width="flex">Account</Field>
+        <Field width="flex">
+          <Trans>Payee</Trans>
+        </Field>
+        <Field width="flex">
+          <Trans>Account</Trans>
+        </Field>
         <Field width="auto" style={{ flex: 1.5 }}>
-          When
+          <Trans>When</Trans>
         </Field>
         <Field width={100} style={{ textAlign: 'right' }}>
-          Amount
+          <Trans>Amount</Trans>
         </Field>
       </TableHeader>
       <Table
@@ -120,21 +131,17 @@ function DiscoverSchedulesTable({
         }}
         items={schedules}
         loading={loading}
-        isSelected={id => selectedItems.has(id)}
+        isSelected={id => selectedItems.has(String(id))}
         renderItem={renderItem}
-        renderEmpty="No schedules found"
+        renderEmpty={t('No schedules found')}
       />
     </View>
   );
 }
 
-export function DiscoverSchedules({
-  modalProps,
-  actions,
-}: {
-  modalProps: CommonModalProps;
-  actions: BoundActions;
-}) {
+export function DiscoverSchedules() {
+  const { t } = useTranslation();
+
   const { data, isLoading } = useSendPlatformRequest('schedule/discover');
 
   const schedules = data || [];
@@ -177,47 +184,61 @@ export function DiscoverSchedules({
     }
 
     setCreating(false);
-    actions.popModal();
   }
 
   return (
     <Modal
-      title="Found schedules"
-      size={{ width: 850, height: 650 }}
-      {...modalProps}
+      name="schedules-discover"
+      containerProps={{ style: { width: 850, height: 650 } }}
     >
-      <Paragraph>
-        We found some possible schedules in your current transactions. Select
-        the ones you want to create.
-      </Paragraph>
-      <Paragraph>
-        If you expected a schedule here and don’t see it, it might be because
-        the payees of the transactions don’t match. Make sure you rename payees
-        on all transactions for a schedule to be the same payee.
-      </Paragraph>
+      {({ state: { close } }) => (
+        <>
+          <ModalHeader
+            title={t('Found Schedules')}
+            rightContent={<ModalCloseButton onPress={close} />}
+          />
+          <Paragraph>
+            <Trans>
+              We found some possible schedules in your current transactions.
+              Select the ones you want to create.
+            </Trans>
+          </Paragraph>
+          <Paragraph>
+            <Trans>
+              If you expected a schedule here and don’t see it, it might be
+              because the payees of the transactions don’t match. Make sure you
+              rename payees on all transactions for a schedule to be the same
+              payee.
+            </Trans>
+          </Paragraph>
 
-      <SelectedProvider instance={selectedInst}>
-        <DiscoverSchedulesTable loading={isLoading} schedules={schedules} />
-      </SelectedProvider>
+          <SelectedProvider instance={selectedInst}>
+            <DiscoverSchedulesTable loading={isLoading} schedules={schedules} />
+          </SelectedProvider>
 
-      <Stack
-        direction="row"
-        align="center"
-        justify="flex-end"
-        style={{
-          paddingTop: 20,
-          paddingBottom: 0,
-        }}
-      >
-        <ButtonWithLoading
-          type="primary"
-          loading={creating}
-          disabled={selectedInst.items.size === 0}
-          onClick={onCreate}
-        >
-          Create schedules
-        </ButtonWithLoading>
-      </Stack>
+          <Stack
+            direction="row"
+            align="center"
+            justify="flex-end"
+            style={{
+              paddingTop: 20,
+              paddingBottom: 0,
+            }}
+          >
+            <ButtonWithLoading
+              variant="primary"
+              isLoading={creating}
+              isDisabled={selectedInst.items.size === 0}
+              onPress={() => {
+                onCreate();
+                close();
+              }}
+            >
+              <Trans>Create schedules</Trans>
+            </ButtonWithLoading>
+          </Stack>
+        </>
+      )}
     </Modal>
   );
 }

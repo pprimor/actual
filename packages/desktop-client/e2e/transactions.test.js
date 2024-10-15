@@ -46,7 +46,7 @@ test.describe('Transactions', () => {
       await expect(datepicker).toMatchThemeScreenshots();
 
       // Select "is xxxxx"
-      await datepicker.getByRole('button', { name: '20' }).click();
+      await datepicker.getByText('20', { exact: true }).click();
       await filterTooltip.applyButton.click();
 
       // Assert that there are no transactions
@@ -139,6 +139,28 @@ test.describe('Transactions', () => {
     await expect(thirdTransaction.category).toHaveText('Categorize');
     await expect(thirdTransaction.debit).toHaveText('111.11');
     await expect(thirdTransaction.credit).toHaveText('');
+    await expect(page).toMatchThemeScreenshots();
+  });
+
+  test('creates a transfer test transaction', async () => {
+    await accountPage.enterSingleTransaction({
+      payee: 'Bank of America',
+      notes: 'Notes field',
+      debit: '12.34',
+    });
+
+    let transaction = accountPage.getEnteredTransaction();
+    await expect(transaction.category.locator('input')).toHaveValue('Transfer');
+    await expect(page).toMatchThemeScreenshots();
+
+    await accountPage.addEnteredTransaction();
+
+    transaction = accountPage.getNthTransaction(0);
+    await expect(transaction.payee).toHaveText('Bank of America');
+    await expect(transaction.notes).toHaveText('Notes field');
+    await expect(transaction.category).toHaveText('Transfer');
+    await expect(transaction.debit).toHaveText('12.34');
+    await expect(transaction.credit).toHaveText('');
     await expect(page).toMatchThemeScreenshots();
   });
 });

@@ -1,19 +1,18 @@
 // @ts-strict-ignore
 import React, { useState } from 'react';
-import { useSelector } from 'react-redux';
 
 import { format as formatDate, parseISO } from 'date-fns';
 
-import { type State } from 'loot-core/client/state-types';
-import { type PrefsState } from 'loot-core/client/state-types/prefs';
-import { type QueriesState } from 'loot-core/client/state-types/queries';
 import { getMonthYearFormat } from 'loot-core/src/shared/months';
 import { getRecurringDescription } from 'loot-core/src/shared/schedules';
 import { integerToCurrency } from 'loot-core/src/shared/util';
 
+import { useAccounts } from '../../hooks/useAccounts';
 import { useCategories } from '../../hooks/useCategories';
+import { useDateFormat } from '../../hooks/useDateFormat';
+import { usePayees } from '../../hooks/usePayees';
 import { type CSSProperties, theme } from '../../style';
-import { LinkButton } from '../common/LinkButton';
+import { Link } from '../common/Link';
 import { Text } from '../common/Text';
 
 type ValueProps<T> = {
@@ -36,16 +35,10 @@ export function Value<T>({
   describe = x => x.name,
   style,
 }: ValueProps<T>) {
-  const dateFormat = useSelector<State, PrefsState['local']['dateFormat']>(
-    state => state.prefs.local.dateFormat || 'MM/dd/yyyy',
-  );
-  const payees = useSelector<State, QueriesState['payees']>(
-    state => state.queries.payees,
-  );
+  const dateFormat = useDateFormat() || 'MM/dd/yyyy';
+  const payees = usePayees();
   const { list: categories } = useCategories();
-  const accounts = useSelector<State, QueriesState['accounts']>(
-    state => state.queries.accounts,
-  );
+  const accounts = useAccounts();
   const valueStyle = {
     color: theme.pageTextPositive,
     ...style,
@@ -162,9 +155,9 @@ export function Value<T>({
         {numHidden > 0 && (
           <Text style={valueStyle}>
             &nbsp;&nbsp;
-            <LinkButton onClick={onExpand} style={valueStyle}>
+            <Link variant="text" onClick={onExpand} style={valueStyle}>
               {numHidden} more items...
-            </LinkButton>
+            </Link>
             {!inline && <br />}
           </Text>
         )}

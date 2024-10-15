@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
 
 import { send, listen } from 'loot-core/src/platform/client/fetch';
@@ -6,11 +6,12 @@ import { applyChanges } from 'loot-core/src/shared/util';
 
 import { useActions } from '../../hooks/useActions';
 import { useCategories } from '../../hooks/useCategories';
+import { usePayees } from '../../hooks/usePayees';
 
 import { ManagePayees } from './ManagePayees';
 
 export function ManagePayeesWithData({ initialSelectedIds }) {
-  const initialPayees = useSelector(state => state.queries.payees);
+  const initialPayees = usePayees();
   const lastUndoState = useSelector(state => state.app.lastUndoState);
   const { grouped: categoryGroups } = useCategories();
 
@@ -20,7 +21,6 @@ export function ManagePayeesWithData({ initialSelectedIds }) {
   const [payees, setPayees] = useState(initialPayees);
   const [ruleCounts, setRuleCounts] = useState({ value: new Map() });
   const [orphans, setOrphans] = useState({ value: new Map() });
-  const payeesRef = useRef();
 
   async function refetchOrphanedPayees() {
     const orphs = await send('payees-get-orphaned');
@@ -119,7 +119,6 @@ export function ManagePayeesWithData({ initialSelectedIds }) {
 
   return (
     <ManagePayees
-      ref={payeesRef}
       payees={payees}
       ruleCounts={ruleCounts.value}
       orphanedPayees={orphans}

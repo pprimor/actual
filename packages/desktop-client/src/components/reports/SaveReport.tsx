@@ -1,15 +1,17 @@
-import React, { createRef, useState } from 'react';
+import React, { createRef, useRef, useState } from 'react';
 
-import { v4 as uuidv4 } from 'uuid';
-
-//import { send, sendCatch } from 'loot-core/src/platform/client/fetch';
+import { useReports } from 'loot-core/client/data-hooks/reports';
+import { send, sendCatch } from 'loot-core/src/platform/client/fetch';
 import { type CustomReportEntity } from 'loot-core/src/types/models';
 
 import { SvgExpandArrow } from '../../icons/v0';
-import { Button } from '../common/Button';
+import { Button } from '../common/Button2';
+import { Popover } from '../common/Popover';
 import { Text } from '../common/Text';
 import { View } from '../common/View';
 
+import { SaveReportChoose } from './SaveReportChoose';
+import { SaveReportDelete } from './SaveReportDelete';
 import { SaveReportMenu } from './SaveReportMenu';
 import { SaveReportName } from './SaveReportName';
 
@@ -24,7 +26,6 @@ type SaveReportProps<T extends CustomReportEntity = CustomReportEntity> = {
     savedReport?: T;
     type: string;
   }) => void;
-  onResetReports: () => void;
 };
 
 export function SaveReport({
@@ -32,65 +33,89 @@ export function SaveReport({
   report,
   savedStatus,
   onReportChange,
-  onResetReports,
 }: SaveReportProps) {
+  const { data: listReports } = useReports();
+  const triggerRef = useRef(null);
+  const [deleteMenuOpen, setDeleteMenuOpen] = useState(false);
   const [nameMenuOpen, setNameMenuOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [chooseMenuOpen, setChooseMenuOpen] = useState(false);
   const [menuItem, setMenuItem] = useState('');
   const [err, setErr] = useState('');
-  const [res, setRes] = useState('');
-  const [name, setName] = useState(report.name);
+  const [newName, setNewName] = useState(report.name ?? '');
   const inputRef = createRef<HTMLInputElement>();
 
-  const onAddUpdate = async (menuChoice: string) => {
-    let savedReport: CustomReportEntity;
-    //save existing states
-    savedReport = {
-      ...report,
-      ...customReportItems,
-    };
+  async function onApply(cond: string) {
+    const chooseSavedReport = listReports.find(r => cond === r.id);
+    onReportChange({ savedReport: chooseSavedReport, type: 'choose' });
+    setChooseMenuOpen(false);
+    setNewName(chooseSavedReport === undefined ? '' : chooseSavedReport.name);
+  }
 
+  const onAddUpdate = async ({ menuChoice }: { menuChoice?: string }) => {
+    if (!menuChoice) {
+      return null;
+    }
     if (menuChoice === 'save-report') {
-      setRes('');
-      //create new flow
-      /*
-      res = await sendCatch('report/create', {
-        ...savedReport,
-      });
-      */
-      savedReport = {
-        ...savedReport,
-        id: uuidv4(),
-        name,
+      const newSavedReport = {
+        ...report,
+        ...customReportItems,
+        name: newName,
       };
-    }
 
-    if (menuChoice === 'rename-report') {
-      //rename
-      savedReport = {
-        ...savedReport,
-        name,
-      };
-    }
+      const response = await sendCatch('report/create', newSavedReport);
 
-    if (menuChoice === 'update-report') {
-      //send update and rename to DB
-      /*
-      res = await sendCatch('report/update', {
-        ...savedReport,
+      if (response.error) {
+        setErr(response.error.message);
+        setNameMenuOpen(true);
+        return;
+      }
+
+      // Add to dashboard
+      await send('dashboard-add-widget', {
+        type: 'custom-report',
+        width: 4,
+        height: 2,
+        meta: { id: response.data },
       });
-      */
-    }
-    if (res !== '') {
-      setErr(res);
-      setNameMenuOpen(true);
-    } else {
+
       setNameMenuOpen(false);
       onReportChange({
-        savedReport,
-        type: menuChoice === 'rename-report' ? 'rename' : 'add-update',
+        savedReport: {
+          ...newSavedReport,
+          id: response.data,
+        },
+        type: 'add-update',
       });
+      return;
     }
+
+    const { name, id, ...props } = customReportItems;
+
+    const updatedReport = {
+      ...report,
+      ...(menuChoice === 'rename-report' ? { name: newName } : props),
+    };
+
+    const response = await sendCatch('report/update', updatedReport);
+
+    if (response.error) {
+      setErr(response.error.message);
+      setNameMenuOpen(true);
+      return;
+    }
+    setNameMenuOpen(false);
+    onReportChange({
+      savedReport: updatedReport,
+      type: menuChoice === 'rename-report' ? 'rename' : 'add-update',
+    });
+  };
+
+  const onDelete = async () => {
+    setNewName('');
+    await send('report/delete', report.id);
+    onReportChange({ type: 'reset' });
+    setDeleteMenuOpen(false);
   };
 
   const onMenuSelect = async (item: string) => {
@@ -103,13 +128,12 @@ export function SaveReport({
         break;
       case 'delete-report':
         setMenuOpen(false);
-        //await send('report/delete', id);
-        onResetReports();
+        setDeleteMenuOpen(true);
         break;
       case 'update-report':
         setErr('');
         setMenuOpen(false);
-        onAddUpdate(item);
+        onAddUpdate({ menuChoice: item });
         break;
       case 'save-report':
         setErr('');
@@ -122,7 +146,13 @@ export function SaveReport({
         break;
       case 'reset-report':
         setMenuOpen(false);
-        onResetReports();
+        setNewName('');
+        onReportChange({ type: 'reset' });
+        break;
+      case 'choose-report':
+        setErr('');
+        setMenuOpen(false);
+        setChooseMenuOpen(true);
         break;
       default:
     }
@@ -136,8 +166,9 @@ export function SaveReport({
       }}
     >
       <Button
-        type="bare"
-        onClick={() => {
+        ref={triggerRef}
+        variant="bare"
+        onPress={() => {
           setMenuOpen(true);
         }}
       >
@@ -155,24 +186,57 @@ export function SaveReport({
         {savedStatus === 'modified' && <Text>(modified)&nbsp;</Text>}
         <SvgExpandArrow width={8} height={8} style={{ marginRight: 5 }} />
       </Button>
-      {menuOpen && (
+
+      <Popover
+        triggerRef={triggerRef}
+        isOpen={menuOpen}
+        onOpenChange={() => setMenuOpen(false)}
+        style={{ width: 150 }}
+      >
         <SaveReportMenu
-          onClose={() => setMenuOpen(false)}
-          report={report}
           onMenuSelect={onMenuSelect}
           savedStatus={savedStatus}
+          listReports={listReports && listReports.length}
         />
-      )}
-      {nameMenuOpen && (
+      </Popover>
+
+      <Popover
+        triggerRef={triggerRef}
+        isOpen={nameMenuOpen}
+        onOpenChange={() => setNameMenuOpen(false)}
+        style={{ width: 325 }}
+      >
         <SaveReportName
-          onClose={() => setNameMenuOpen(false)}
           menuItem={menuItem}
-          setName={setName}
+          name={newName}
+          setName={setNewName}
           inputRef={inputRef}
           onAddUpdate={onAddUpdate}
           err={err}
         />
-      )}
+      </Popover>
+
+      <Popover
+        triggerRef={triggerRef}
+        isOpen={chooseMenuOpen}
+        onOpenChange={() => setChooseMenuOpen(false)}
+        style={{ padding: 15 }}
+      >
+        <SaveReportChoose onApply={onApply} />
+      </Popover>
+
+      <Popover
+        triggerRef={triggerRef}
+        isOpen={deleteMenuOpen}
+        onOpenChange={() => setDeleteMenuOpen(false)}
+        style={{ width: 275, padding: 15 }}
+      >
+        <SaveReportDelete
+          onDelete={onDelete}
+          onClose={() => setDeleteMenuOpen(false)}
+          name={report.name}
+        />
+      </Popover>
     </View>
   );
 }

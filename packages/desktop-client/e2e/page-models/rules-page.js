@@ -44,7 +44,7 @@ export class RulesPage {
         .first()
         .click();
       await this.page
-        .getByRole('option', { exact: true, name: data.conditionsOp })
+        .getByRole('button', { exact: true, name: data.conditionsOp })
         .click();
     }
 
@@ -52,6 +52,7 @@ export class RulesPage {
       await this._fillEditorFields(
         data.conditions,
         this.page.getByTestId('condition-list'),
+        true,
       );
     }
 
@@ -61,9 +62,21 @@ export class RulesPage {
         this.page.getByTestId('action-list'),
       );
     }
+
+    if (data.splits) {
+      let idx = data.actions?.length ?? 0;
+      for (const splitActions of data.splits) {
+        await this.page.getByTestId('add-split-transactions').click();
+        await this._fillEditorFields(
+          splitActions,
+          this.page.getByTestId('action-list').nth(idx),
+        );
+        idx++;
+      }
+    }
   }
 
-  async _fillEditorFields(data, rootElement) {
+  async _fillEditorFields(data, rootElement, fieldFirst = false) {
     for (const idx in data) {
       const { field, op, value } = data[idx];
 
@@ -73,16 +86,25 @@ export class RulesPage {
         await rootElement.getByRole('button', { name: 'Add entry' }).click();
       }
 
+      if (op && !fieldFirst) {
+        await row.getByTestId('op-select').getByRole('button').first().click();
+        await this.page.getByRole('button', { name: op, exact: true }).click();
+      }
+
       if (field) {
-        await row.getByRole('button').first().click();
+        await row
+          .getByTestId('field-select')
+          .getByRole('button')
+          .first()
+          .click();
         await this.page
-          .getByRole('option', { exact: true, name: field })
+          .getByRole('button', { name: field, exact: true })
           .click();
       }
 
-      if (op) {
-        await row.getByRole('button', { name: 'is' }).click();
-        await this.page.getByRole('option', { name: op, exact: true }).click();
+      if (op && fieldFirst) {
+        await row.getByTestId('op-select').getByRole('button').first().click();
+        await this.page.getByRole('button', { name: op, exact: true }).click();
       }
 
       if (value) {

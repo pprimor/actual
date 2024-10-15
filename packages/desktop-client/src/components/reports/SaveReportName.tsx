@@ -1,29 +1,40 @@
 import React, { type RefObject, useEffect } from 'react';
+import { Form } from 'react-aria-components';
+
+import { type CustomReportEntity } from 'loot-core/types/models/reports';
 
 import { theme } from '../../style';
-import { Button } from '../common/Button';
+import { Button } from '../common/Button2';
 import { Input } from '../common/Input';
-import { MenuTooltip } from '../common/MenuTooltip';
 import { Stack } from '../common/Stack';
 import { Text } from '../common/Text';
+import { View } from '../common/View';
 import { FormField, FormLabel } from '../forms';
 
 type SaveReportNameProps = {
-  onClose: () => void;
   menuItem: string;
+  name: string;
   setName: (name: string) => void;
   inputRef: RefObject<HTMLInputElement>;
-  onAddUpdate: (menuItem: string) => void;
+  onAddUpdate: ({
+    menuChoice,
+    reportData,
+  }: {
+    menuChoice?: string;
+    reportData?: CustomReportEntity;
+  }) => void;
   err: string;
+  report?: CustomReportEntity;
 };
 
 export function SaveReportName({
-  onClose,
   menuItem,
+  name,
   setName,
   inputRef,
   onAddUpdate,
   err,
+  report,
 }: SaveReportNameProps) {
   useEffect(() => {
     if (inputRef.current) {
@@ -32,14 +43,22 @@ export function SaveReportName({
   }, []);
 
   return (
-    <MenuTooltip width={325} onClose={onClose}>
+    <>
       {menuItem !== 'update-report' && (
-        <form>
+        <Form
+          onSubmit={e => {
+            e.preventDefault();
+            onAddUpdate({
+              menuChoice: menuItem ?? undefined,
+              reportData: report ?? undefined,
+            });
+          }}
+        >
           <Stack
             direction="row"
             justify="flex-end"
             align="center"
-            style={{ padding: 10 }}
+            style={{ padding: 15 }}
           >
             <FormField style={{ flex: 1 }}>
               <FormLabel
@@ -47,28 +66,27 @@ export function SaveReportName({
                 htmlFor="name-field"
                 style={{ userSelect: 'none' }}
               />
-              <Input inputRef={inputRef} onUpdate={setName} />
+              <Input
+                value={name}
+                id="name-field"
+                inputRef={inputRef}
+                onChangeValue={setName}
+                style={{ marginTop: 10 }}
+              />
             </FormField>
-            <Button
-              type="primary"
-              style={{ marginTop: 18 }}
-              onClick={e => {
-                e.preventDefault();
-                onAddUpdate(menuItem);
-              }}
-            >
+            <Button variant="primary" type="submit" style={{ marginTop: 30 }}>
               {menuItem === 'save-report' ? 'Add' : 'Update'}
             </Button>
           </Stack>
-        </form>
+        </Form>
       )}
       {err !== '' ? (
         <Stack direction="row" align="center" style={{ padding: 10 }}>
           <Text style={{ color: theme.errorText }}>{err}</Text>
         </Stack>
       ) : (
-        <Text />
+        <View />
       )}
-    </MenuTooltip>
+    </>
   );
 }

@@ -1,13 +1,13 @@
 import React from 'react';
 
-import { SvgSettingsSliderAlternate } from '../../icons/v2';
-import { Button } from '../common/Button';
+import { SvgFilter } from '../../icons/v1/Filter';
+import { Button } from '../common/Button2';
 
-export function FiltersButton({ onClick }: { onClick: () => void }) {
+export function FiltersButton({ onPress }: { onPress: () => void }) {
   return (
-    <Button type="bare" onClick={onClick} title="Filters">
-      <SvgSettingsSliderAlternate
-        style={{ width: 16, height: 16, marginRight: 5 }}
+    <Button variant="bare" onPress={onPress}>
+      <SvgFilter
+        style={{ width: 12, height: 12, marginRight: 5, flexShrink: 0 }}
       />{' '}
       Filter
     </Button>

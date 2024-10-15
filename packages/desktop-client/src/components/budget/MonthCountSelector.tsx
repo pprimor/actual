@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { SvgCalendar } from '../../icons/v2';
 import { theme } from '../../style';
@@ -22,13 +23,15 @@ function Calendar({ color, onClick }: CalendarProps) {
 
 type MonthCountSelectorProps = {
   maxMonths: number;
-  onChange: (value: number) => Promise<void>;
+  onChange: (value: number) => void;
 };
 
 export function MonthCountSelector({
   maxMonths,
   onChange,
 }: MonthCountSelectorProps) {
+  const { t } = useTranslation();
+
   const { displayMax } = useBudgetMonthCount();
 
   // It doesn't make sense to show anything if we can only fit one
@@ -62,7 +65,7 @@ export function MonthCountSelector({
           transform: 'scale(1.2)',
         },
       }}
-      title="Choose the number of months shown at a time"
+      title={t('Choose the number of months shown at a time')}
     >
       {calendars}
     </View>

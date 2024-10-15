@@ -1,9 +1,9 @@
 import React from 'react';
+import { Trans } from 'react-i18next';
 import { useSelector } from 'react-redux';
 import { useTransition, animated } from 'react-spring';
 
-import { type State } from 'loot-core/client/state-types';
-import { type AccountState } from 'loot-core/client/state-types/account';
+import { type State } from 'loot-core/src/client/state-types';
 
 import { theme, styles } from '../style';
 
@@ -12,22 +12,21 @@ import { Text } from './common/Text';
 import { View } from './common/View';
 
 export function BankSyncStatus() {
-  const accountsSyncing = useSelector<State, AccountState['accountsSyncing']>(
-    state => state.account.accountsSyncing,
+  const accountsSyncing = useSelector(
+    (state: State) => state.account.accountsSyncing,
   );
+  const accountsSyncingCount = accountsSyncing.length;
+  const count = accountsSyncingCount;
 
-  const name = accountsSyncing
-    ? accountsSyncing === '__all'
-      ? 'accounts'
-      : accountsSyncing
-    : null;
-
-  const transitions = useTransition(name, {
-    from: { opacity: 0, transform: 'translateY(-100px)' },
-    enter: { opacity: 1, transform: 'translateY(0)' },
-    leave: { opacity: 0, transform: 'translateY(-100px)' },
-    unique: true,
-  });
+  const transitions = useTransition(
+    accountsSyncingCount > 0 ? 'syncing' : null,
+    {
+      from: { opacity: 0, transform: 'translateY(-100px)' },
+      enter: { opacity: 1, transform: 'translateY(0)' },
+      leave: { opacity: 0, transform: 'translateY(-100px)' },
+      unique: true,
+    },
+  );
 
   return (
     <View
@@ -57,10 +56,14 @@ export function BankSyncStatus() {
                 }}
               >
                 <AnimatedRefresh
-                  animating={true}
+                  animating
                   iconStyle={{ color: theme.pillTextSelected }}
                 />
-                <Text>Syncing {item}</Text>
+                <Text style={{ marginLeft: 5 }}>
+                  <Trans count={accountsSyncingCount}>
+                    Syncing... {{ count }} accounts remaining
+                  </Trans>
+                </Text>
               </View>
             </animated.div>
           ),

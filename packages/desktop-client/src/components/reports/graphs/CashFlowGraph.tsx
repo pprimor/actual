@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import * as d from 'date-fns';
 import { css } from 'glamor';
@@ -15,15 +16,16 @@ import {
   type TooltipProps,
 } from 'recharts';
 
-import { usePrivacyMode } from 'loot-core/src/client/privacy';
 import {
   amountToCurrency,
   amountToCurrencyNoDecimal,
 } from 'loot-core/src/shared/util';
 
-import { theme } from '../../../style';
+import { usePrivacyMode } from '../../../hooks/usePrivacyMode';
+import { type CSSProperties, theme } from '../../../style';
 import { AlignedText } from '../../common/AlignedText';
 import { chartTheme } from '../chart-theme';
+import { Container } from '../Container';
 
 const MAX_BAR_SIZE = 50;
 const ANIMATION_DURATION = 1000; // in ms
@@ -33,7 +35,9 @@ type CustomTooltipProps = TooltipProps<number, 'date'> & {
 };
 
 function CustomTooltip({ active, payload, isConcise }: CustomTooltipProps) {
-  if (!active || !payload) {
+  const { t } = useTranslation();
+
+  if (!active || !payload || !Array.isArray(payload) || !payload[0]) {
     return null;
   }
 
@@ -57,24 +61,30 @@ function CustomTooltip({ active, payload, isConcise }: CustomTooltipProps) {
           </strong>
         </div>
         <div style={{ lineHeight: 1.5 }}>
-          <AlignedText left="Income:" right={amountToCurrency(data.income)} />
           <AlignedText
-            left="Expenses:"
+            left={t('Income:')}
+            right={amountToCurrency(data.income)}
+          />
+          <AlignedText
+            left={t('Expenses:')}
             right={amountToCurrency(data.expenses)}
           />
           <AlignedText
-            left="Change:"
+            left={t('Change:')}
             right={
               <strong>{amountToCurrency(data.income + data.expenses)}</strong>
             }
           />
           {data.transfers !== 0 && (
             <AlignedText
-              left="Transfers:"
+              left={t('Transfers:')}
               right={amountToCurrency(data.transfers)}
             />
           )}
-          <AlignedText left="Balance:" right={amountToCurrency(data.balance)} />
+          <AlignedText
+            left={t('Balance:')}
+            right={amountToCurrency(data.balance)}
+          />
         </div>
       </div>
     </div>
@@ -90,11 +100,13 @@ type CashFlowGraphProps = {
   };
   isConcise: boolean;
   showBalance?: boolean;
+  style?: CSSProperties;
 };
 export function CashFlowGraph({
   graphData,
   isConcise,
   showBalance = true,
+  style,
 }: CashFlowGraphProps) {
   const privacyMode = usePrivacyMode();
   const [yAxisIsHovered, setYAxisIsHovered] = useState(false);
@@ -108,63 +120,72 @@ export function CashFlowGraph({
   }));
 
   return (
-    <ResponsiveContainer width="100%" height={300}>
-      <ComposedChart stackOffset="sign" data={data}>
-        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-        <XAxis
-          dataKey="date"
-          tick={{ fill: theme.reportsLabel }}
-          tickFormatter={x => {
-            // eslint-disable-next-line rulesdir/typography
-            return d.format(x, isConcise ? "MMM ''yy" : 'MMM d');
-          }}
-          minTickGap={50}
-        />
-        <YAxis
-          tick={{ fill: theme.reportsLabel }}
-          tickCount={8}
-          tickFormatter={value =>
-            privacyMode && !yAxisIsHovered
-              ? '...'
-              : amountToCurrencyNoDecimal(value)
-          }
-          onMouseEnter={() => setYAxisIsHovered(true)}
-          onMouseLeave={() => setYAxisIsHovered(false)}
-        />
-        <Tooltip
-          labelFormatter={x => {
-            // eslint-disable-next-line rulesdir/typography
-            return d.format(x, isConcise ? "MMM ''yy" : 'MMM d');
-          }}
-          content={<CustomTooltip isConcise={isConcise} />}
-          isAnimationActive={false}
-        />
+    <Container style={style}>
+      {(width, height) => (
+        <ResponsiveContainer>
+          <ComposedChart
+            width={width}
+            height={height}
+            stackOffset="sign"
+            data={data}
+          >
+            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+            <XAxis
+              dataKey="date"
+              tick={{ fill: theme.reportsLabel }}
+              tickFormatter={x => {
+                // eslint-disable-next-line rulesdir/typography
+                return d.format(x, isConcise ? "MMM ''yy" : 'MMM d');
+              }}
+              minTickGap={50}
+            />
+            <YAxis
+              tick={{ fill: theme.reportsLabel }}
+              tickCount={8}
+              tickFormatter={value =>
+                privacyMode && !yAxisIsHovered
+                  ? '...'
+                  : amountToCurrencyNoDecimal(value)
+              }
+              onMouseEnter={() => setYAxisIsHovered(true)}
+              onMouseLeave={() => setYAxisIsHovered(false)}
+            />
+            <Tooltip
+              labelFormatter={x => {
+                // eslint-disable-next-line rulesdir/typography
+                return d.format(x, isConcise ? "MMM ''yy" : 'MMM d');
+              }}
+              content={<CustomTooltip isConcise={isConcise} />}
+              isAnimationActive={false}
+            />
 
-        <ReferenceLine y={0} stroke="#000" />
-        <Bar
-          dataKey="income"
-          stackId="a"
-          fill={chartTheme.colors.blue}
-          maxBarSize={MAX_BAR_SIZE}
-          animationDuration={ANIMATION_DURATION}
-        />
-        <Bar
-          dataKey="expenses"
-          stackId="a"
-          fill={chartTheme.colors.red}
-          maxBarSize={MAX_BAR_SIZE}
-          animationDuration={ANIMATION_DURATION}
-        />
-        <Line
-          type="monotone"
-          dataKey="balance"
-          dot={false}
-          hide={!showBalance}
-          stroke={theme.pageTextLight}
-          strokeWidth={2}
-          animationDuration={ANIMATION_DURATION}
-        />
-      </ComposedChart>
-    </ResponsiveContainer>
+            <ReferenceLine y={0} stroke="#000" />
+            <Bar
+              dataKey="income"
+              stackId="a"
+              fill={chartTheme.colors.blue}
+              maxBarSize={MAX_BAR_SIZE}
+              animationDuration={ANIMATION_DURATION}
+            />
+            <Bar
+              dataKey="expenses"
+              stackId="a"
+              fill={chartTheme.colors.red}
+              maxBarSize={MAX_BAR_SIZE}
+              animationDuration={ANIMATION_DURATION}
+            />
+            <Line
+              type="monotone"
+              dataKey="balance"
+              dot={false}
+              hide={!showBalance}
+              stroke={theme.pageTextLight}
+              strokeWidth={2}
+              animationDuration={ANIMATION_DURATION}
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
+      )}
+    </Container>
   );
 }

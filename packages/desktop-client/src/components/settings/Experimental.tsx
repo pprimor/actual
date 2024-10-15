@@ -1,14 +1,12 @@
 import { type ReactNode, useState } from 'react';
-import { useSelector } from 'react-redux';
+import { Trans, useTranslation } from 'react-i18next';
 
-import { type State } from 'loot-core/src/client/state-types';
-import { type PrefsState } from 'loot-core/src/client/state-types/prefs';
 import type { FeatureFlag } from 'loot-core/src/types/prefs';
 
-import { useActions } from '../../hooks/useActions';
 import { useFeatureFlag } from '../../hooks/useFeatureFlag';
+import { useSyncedPref } from '../../hooks/useSyncedPref';
 import { theme } from '../../style';
-import { LinkButton } from '../common/LinkButton';
+import { Link } from '../common/Link';
 import { Text } from '../common/Text';
 import { View } from '../common/View';
 import { Checkbox } from '../forms';
@@ -20,33 +18,40 @@ type FeatureToggleProps = {
   disableToggle?: boolean;
   error?: ReactNode;
   children: ReactNode;
+  feedbackLink?: string;
 };
 
 function FeatureToggle({
-  flag,
+  flag: flagName,
   disableToggle = false,
+  feedbackLink,
   error,
   children,
 }: FeatureToggleProps) {
-  const { savePrefs } = useActions();
-  const enabled = useFeatureFlag(flag);
+  const enabled = useFeatureFlag(flagName);
+  const [_, setFlagPref] = useSyncedPref(`flags.${flagName}`);
 
   return (
     <label style={{ display: 'flex' }}>
       <Checkbox
         checked={enabled}
         onChange={() => {
-          // @ts-expect-error key type is not correctly inferred
-          savePrefs({
-            [`flags.${flag}`]: !enabled,
-          });
+          setFlagPref(String(!enabled));
         }}
         disabled={disableToggle}
       />
       <View
         style={{ color: disableToggle ? theme.pageTextSubdued : 'inherit' }}
       >
-        {children}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+          {children}
+          {feedbackLink && (
+            <Link variant="external" to={feedbackLink}>
+              <Trans>(give feedback)</Trans>
+            </Link>
+          )}
+        </View>
+
         {disableToggle && (
           <Text
             style={{
@@ -62,19 +67,19 @@ function FeatureToggle({
   );
 }
 
-function ReportBudgetFeature() {
-  const budgetType = useSelector<State, PrefsState['local']['budgetType']>(
-    state => state.prefs.local?.budgetType,
-  );
+function TrackingBudgetFeature() {
+  const { t } = useTranslation();
+  const [budgetType = 'rollover'] = useSyncedPref('budgetType');
   const enabled = useFeatureFlag('reportBudget');
   const blockToggleOff = budgetType === 'report' && enabled;
   return (
     <FeatureToggle
       flag="reportBudget"
       disableToggle={blockToggleOff}
-      error="Switch to a rollover budget before turning off this feature"
+      error={t('Switch to a envelope budget before turning off this feature')}
+      feedbackLink="https://github.com/actualbudget/actual/issues/2999"
     >
-      Budget mode toggle
+      <Trans>Budget mode toggle</Trans>
     </FeatureToggle>
   );
 }
@@ -87,39 +92,54 @@ export function ExperimentalFeatures() {
       primaryAction={
         expanded ? (
           <View style={{ gap: '1em' }}>
-            <FeatureToggle flag="categorySpendingReport">
-              Category spending report
+            <FeatureToggle
+              flag="spendingReport"
+              feedbackLink="https://github.com/actualbudget/actual/issues/2820"
+            >
+              <Trans>Monthly spending report</Trans>
             </FeatureToggle>
-            <FeatureToggle flag="customReports">Custom reports</FeatureToggle>
-            <FeatureToggle flag="sankeyReport">Sankey report</FeatureToggle>
 
-            <ReportBudgetFeature />
+            <TrackingBudgetFeature />
 
             <FeatureToggle flag="goalTemplatesEnabled">
-              Goal templates
+              <Trans>Goal templates</Trans>
             </FeatureToggle>
-            <FeatureToggle flag="simpleFinSync">SimpleFIN sync</FeatureToggle>
-            <FeatureToggle flag="splitsInRules">Splits in rules</FeatureToggle>
+            <FeatureToggle
+              flag="dashboards"
+              feedbackLink="https://github.com/actualbudget/actual/issues/3282"
+            >
+              <Trans>Customizable reports page (dashboards)</Trans>
+            </FeatureToggle>
+            <FeatureToggle
+              flag="actionTemplating"
+              feedbackLink="https://github.com/actualbudget/actual/issues/3606"
+            >
+              <Trans>Rule action templating</Trans>
+            </FeatureToggle>
           </View>
         ) : (
-          <LinkButton
+          <Link
+            variant="text"
             onClick={() => setExpanded(true)}
+            data-testid="experimental-settings"
             style={{
               flexShrink: 0,
               alignSelf: 'flex-start',
               color: theme.pageTextPositive,
             }}
           >
-            I understand the risks, show experimental features
-          </LinkButton>
+            <Trans>I understand the risks, show experimental features</Trans>
+          </Link>
         )
       }
     >
       <Text>
-        <strong>Experimental features.</strong> These features are not fully
-        tested and may not work as expected. THEY MAY CAUSE IRRECOVERABLE DATA
-        LOSS. They may do nothing at all. Only enable them if you know what you
-        are doing.
+        <Trans>
+          <strong>Experimental features.</strong> These features are not fully
+          tested and may not work as expected. THEY MAY CAUSE IRRECOVERABLE DATA
+          LOSS. They may do nothing at all. Only enable them if you know what
+          you are doing.
+        </Trans>
       </Text>
     </Setting>
   );

@@ -51,6 +51,8 @@ export class SyncError extends Error {
   }
 }
 
+export class ValidationError extends Error {}
+
 export class TransactionError extends Error {}
 
 export class RuleError extends Error {
@@ -62,8 +64,9 @@ export class RuleError extends Error {
   }
 }
 
-export function APIError(msg: string) {
-  return { type: 'APIError', message: msg };
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function APIError(msg: string, meta?: Record<string, any>) {
+  return { type: 'APIError', message: msg, meta };
 }
 
 export function FileDownloadError(

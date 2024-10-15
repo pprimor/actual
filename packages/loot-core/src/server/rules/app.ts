@@ -1,5 +1,4 @@
 // @ts-strict-ignore
-import { FIELD_TYPES as ruleFieldTypes } from '../../shared/rules';
 import { type RuleEntity } from '../../types/models';
 import { Condition, Action, rankRules } from '../accounts/rules';
 import * as rules from '../accounts/transaction-rules';
@@ -15,46 +14,37 @@ function validateRule(rule: Partial<RuleEntity>) {
   // Returns an array of errors, the array is the same link as the
   // passed-in `array`, or null if there are no errors
   function runValidation<T>(array: T[], validate: (item: T) => unknown) {
-    const result = array
-      .map(item => {
-        try {
-          validate(item);
-        } catch (e) {
-          if (e instanceof RuleError) {
-            console.warn('Invalid rule', e);
-            return e.type;
-          }
-          throw e;
+    const result = array.map(item => {
+      try {
+        validate(item);
+      } catch (e) {
+        if (e instanceof RuleError) {
+          console.warn('Invalid rule', e);
+          return e.type;
         }
-        return null;
-      })
-      .filter((res): res is string => typeof res === 'string');
+        throw e;
+      }
+      return null;
+    });
 
-    return result.length ? result : null;
+    return result.filter((res): res is string => typeof res === 'string').length
+      ? result
+      : null;
   }
 
   const conditionErrors = runValidation(
     rule.conditions,
-    cond =>
-      new Condition(
-        cond.op,
-        cond.field,
-        cond.value,
-        cond.options,
-        ruleFieldTypes,
-      ),
+    cond => new Condition(cond.op, cond.field, cond.value, cond.options),
   );
 
   const actionErrors = runValidation(rule.actions, action =>
-    action.op === 'link-schedule'
-      ? new Action(action.op, null, action.value, null, ruleFieldTypes)
-      : new Action(
-          action.op,
-          action.field,
-          action.value,
-          action.options,
-          ruleFieldTypes,
-        ),
+    action.op === 'set-split-amount'
+      ? new Action(action.op, null, action.value, action.options)
+      : action.op === 'link-schedule'
+        ? new Action(action.op, null, action.value, null)
+        : action.op === 'prepend-notes' || action.op === 'append-notes'
+          ? new Action(action.op, null, action.value, null)
+          : new Action(action.op, action.field, action.value, action.options),
   );
 
   if (conditionErrors || actionErrors) {
@@ -84,7 +74,7 @@ app.method(
     }
 
     const id = await rules.insertRule(rule);
-    return { id };
+    return { id, ...rule };
   }),
 );
 
@@ -97,14 +87,14 @@ app.method(
     }
 
     await rules.updateRule(rule);
-    return {};
+    return rule;
   }),
 );
 
 app.method(
   'rule-delete',
-  mutator(async function (rule) {
-    return rules.deleteRule(rule);
+  mutator(async function (id) {
+    return rules.deleteRule(id);
   }),
 );
 
@@ -115,7 +105,7 @@ app.method(
 
     await batchMessages(async () => {
       for (const id of ids) {
-        const res = await rules.deleteRule({ id });
+        const res = await rules.deleteRule(id);
         if (res === false) {
           someDeletionsFailed = true;
         }

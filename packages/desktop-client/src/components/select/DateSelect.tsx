@@ -1,24 +1,22 @@
 // @ts-strict-ignore
 import React, {
   forwardRef,
-  useState,
-  useRef,
   useEffect,
-  useLayoutEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
-  type MutableRefObject,
+  useRef,
+  useState,
+  type ComponentProps,
   type KeyboardEvent,
+  type MutableRefObject,
 } from 'react';
-import { useSelector } from 'react-redux';
 
 import { parse, parseISO, format, subDays, addDays, isValid } from 'date-fns';
 import Pikaday from 'pikaday';
 
 import 'pikaday/css/pikaday.css';
 
-import { type State } from 'loot-core/client/state-types';
-import { type PrefsState } from 'loot-core/client/state-types/prefs';
 import {
   getDayMonthFormat,
   getDayMonthRegex,
@@ -26,12 +24,12 @@ import {
   getShortYearRegex,
   currentDate,
 } from 'loot-core/src/shared/months';
-import { stringToInteger } from 'loot-core/src/shared/util';
 
-import { type CSSProperties, theme } from '../../style';
-import { Input, type InputProps } from '../common/Input';
-import { View, type ViewProps } from '../common/View';
-import { Tooltip } from '../tooltips';
+import { useSyncedPref } from '../../hooks/useSyncedPref';
+import { styles, theme } from '../../style';
+import { Input } from '../common/Input';
+import { Popover } from '../common/Popover';
+import { View } from '../common/View';
 
 import DateSelectLeft from './DateSelect.left.png';
 import DateSelectRight from './DateSelect.right.png';
@@ -135,7 +133,7 @@ const DatePicker = forwardRef<DatePickerForwardedRef, DatePickerProps>(
       picker.current = new Pikaday({
         theme: 'actual-date-picker',
         keyboardInput: false,
-        firstDay: stringToInteger(firstDayOfWeekIdx),
+        firstDay: parseInt(firstDayOfWeekIdx),
         defaultDate: value
           ? parse(value, dateFormat, currentDate())
           : currentDate(),
@@ -166,14 +164,16 @@ const DatePicker = forwardRef<DatePickerForwardedRef, DatePickerProps>(
   },
 );
 
+DatePicker.displayName = 'DatePicker';
+
 function defaultShouldSaveFromKey(e) {
   return e.key === 'Enter';
 }
 
 type DateSelectProps = {
-  containerProps?: ViewProps;
-  inputProps?: InputProps;
-  tooltipStyle?: CSSProperties;
+  id?: string;
+  containerProps?: ComponentProps<typeof View>;
+  inputProps?: ComponentProps<typeof Input>;
   value: string;
   isOpen?: boolean;
   embedded?: boolean;
@@ -182,15 +182,15 @@ type DateSelectProps = {
   openOnFocus?: boolean;
   inputRef?: MutableRefObject<HTMLInputElement>;
   shouldSaveFromKey?: (e: KeyboardEvent<HTMLInputElement>) => boolean;
-  tableBehavior?: boolean;
+  clearOnBlur?: boolean;
   onUpdate?: (selectedDate: string) => void;
   onSelect: (selectedDate: string) => void;
 };
 
 export function DateSelect({
+  id,
   containerProps,
   inputProps,
-  tooltipStyle,
   value: defaultValue,
   isOpen,
   embedded,
@@ -199,7 +199,7 @@ export function DateSelect({
   openOnFocus = true,
   inputRef: originalInputRef,
   shouldSaveFromKey = defaultShouldSaveFromKey,
-  tableBehavior,
+  clearOnBlur = true,
   onUpdate,
   onSelect,
 }: DateSelectProps) {
@@ -233,14 +233,8 @@ export function DateSelect({
   const [selectedValue, setSelectedValue] = useState(value);
   const userSelectedValue = useRef(selectedValue);
 
-  const firstDayOfWeekIdx = useSelector<
-    State,
-    PrefsState['local']['firstDayOfWeekIdx']
-  >(state =>
-    state.prefs.local?.firstDayOfWeekIdx
-      ? state.prefs.local.firstDayOfWeekIdx
-      : '0',
-  );
+  const [_firstDayOfWeekIdx] = useSyncedPref('firstDayOfWeekIdx');
+  const firstDayOfWeekIdx = _firstDayOfWeekIdx || '0';
 
   useEffect(() => {
     userSelectedValue.current = value;
@@ -328,23 +322,30 @@ export function DateSelect({
   }
 
   const maybeWrapTooltip = content => {
-    return embedded ? (
-      content
-    ) : (
-      <Tooltip
-        position="bottom-left"
+    if (embedded) {
+      return open ? content : null;
+    }
+
+    return (
+      <Popover
+        triggerRef={inputRef}
+        placement="bottom start"
         offset={2}
-        style={{ padding: 0, minWidth: 225, ...tooltipStyle }}
+        isOpen={open}
+        isNonModal
+        onOpenChange={() => setOpen(false)}
+        style={{ ...styles.popover, minWidth: 225 }}
         data-testid="date-select-tooltip"
       >
         {content}
-      </Tooltip>
+      </Popover>
     );
   };
 
   return (
     <View {...containerProps}>
       <Input
+        id={id}
         focused={focused}
         {...inputProps}
         inputRef={inputRef}
@@ -368,7 +369,7 @@ export function DateSelect({
           }
           inputProps?.onBlur?.(e);
 
-          if (!tableBehavior) {
+          if (clearOnBlur) {
             // If value is empty, that drives what gets selected.
             // Otherwise the input is reset to whatever is already
             // selected
@@ -386,24 +387,23 @@ export function DateSelect({
           }
         }}
       />
-      {open &&
-        maybeWrapTooltip(
-          <DatePicker
-            ref={picker}
-            value={selectedValue}
-            firstDayOfWeekIdx={firstDayOfWeekIdx}
-            dateFormat={dateFormat}
-            onUpdate={date => {
-              setSelectedValue(format(date, dateFormat));
-              onUpdate?.(format(date, 'yyyy-MM-dd'));
-            }}
-            onSelect={date => {
-              setValue(format(date, dateFormat));
-              onSelect(format(date, 'yyyy-MM-dd'));
-              setOpen(false);
-            }}
-          />,
-        )}
+      {maybeWrapTooltip(
+        <DatePicker
+          ref={picker}
+          value={selectedValue}
+          firstDayOfWeekIdx={firstDayOfWeekIdx}
+          dateFormat={dateFormat}
+          onUpdate={date => {
+            setSelectedValue(format(date, dateFormat));
+            onUpdate?.(format(date, 'yyyy-MM-dd'));
+          }}
+          onSelect={date => {
+            setValue(format(date, dateFormat));
+            onSelect(format(date, 'yyyy-MM-dd'));
+            setOpen(false);
+          }}
+        />,
+      )}
     </View>
   );
 }

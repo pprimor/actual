@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { t } from 'i18next';
 import throttle from 'throttleit';
 
 import { send } from '../../platform/client/fetch';
@@ -53,7 +54,7 @@ export function applyBudgetAction(month, type, args) {
       case 'reset-hold':
         await send('budget/reset-hold', { month });
         break;
-      case 'cover':
+      case 'cover-overspending':
         await send('budget/cover-overspending', {
           month,
           to: args.to,
@@ -64,6 +65,12 @@ export function applyBudgetAction(month, type, args) {
         await send('budget/transfer-available', {
           month,
           amount: args.amount,
+          category: args.category,
+        });
+        break;
+      case 'cover-overbudgeted':
+        await send('budget/cover-overbudgeted', {
+          month,
           category: args.category,
         });
         break;
@@ -160,8 +167,9 @@ export function deleteCategory(id: string, transferId?: string) {
           dispatch(
             addNotification({
               type: 'error',
-              message:
+              message: t(
                 'A category must be transferred to another of the same type (expense or income)',
+              ),
             }),
           );
           break;
@@ -240,6 +248,17 @@ export function getPayees() {
   };
 }
 
+export function getCommonPayees() {
+  return async (dispatch: Dispatch) => {
+    const payees = await send('common-payees-get');
+    dispatch({
+      type: constants.LOAD_COMMON_PAYEES,
+      payees,
+    });
+    return payees;
+  };
+}
+
 export function initiallyLoadPayees() {
   return async (dispatch: Dispatch, getState: GetState) => {
     if (getState().queries.payees.length === 0) {
@@ -249,8 +268,10 @@ export function initiallyLoadPayees() {
 }
 
 export function createPayee(name: string) {
-  return async () => {
-    return send('payee-create', { name: name.trim() });
+  return async (dispatch: Dispatch) => {
+    const id = await send('payee-create', { name: name.trim() });
+    dispatch(getPayees());
+    return id;
   };
 }
 

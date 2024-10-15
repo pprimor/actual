@@ -4,12 +4,16 @@ import { theme, styles } from '../../style';
 import { Text } from '../common/Text';
 import { View } from '../common/View';
 
+import { LegendItem } from './LegendItem';
+import { ReportOptions } from './ReportOptions';
+
 type ReportLegendProps = {
   legend?: Array<{ name: string; color: string }>;
   groupBy: string;
+  interval: string;
 };
 
-export function ReportLegend({ legend, groupBy }: ReportLegendProps) {
+export function ReportLegend({ legend, groupBy, interval }: ReportLegendProps) {
   return (
     <View
       style={{
@@ -28,39 +32,19 @@ export function ReportLegend({ legend, groupBy }: ReportLegendProps) {
           paddingTop: 10,
         }}
       >
-        {groupBy}
+        {groupBy === 'Interval'
+          ? ReportOptions.intervalMap.get(interval)
+          : groupBy}
       </Text>
       <View>
         {legend &&
           legend.map(item => {
             return (
-              <View
+              <LegendItem
                 key={item.name}
-                style={{
-                  padding: 10,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                }}
-              >
-                <View
-                  style={{
-                    marginRight: 5,
-                    borderRadius: 1000,
-                    width: 14,
-                    height: 14,
-                    backgroundColor: item.color,
-                  }}
-                />
-                <Text
-                  style={{
-                    whiteSpace: 'nowrap',
-                    textOverflow: 'ellipsis',
-                    flexShrink: 0,
-                  }}
-                >
-                  {item.name}
-                </Text>
-              </View>
+                color={item.color}
+                label={item.name}
+              />
             );
           })}
       </View>

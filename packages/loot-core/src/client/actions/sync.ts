@@ -1,4 +1,3 @@
-// @ts-strict-ignore
 import { send } from '../../platform/client/fetch';
 import { getUploadError } from '../../shared/errors';
 
@@ -32,7 +31,6 @@ export function resetSync() {
       }
     } else {
       await dispatch(sync());
-      await dispatch(loadPrefs());
     }
   };
 }
@@ -45,12 +43,16 @@ export function sync() {
       if ('error' in result) {
         return { error: result.error };
       }
-      return {};
+
+      // Update the prefs
+      await dispatch(loadPrefs());
     }
+
+    return {};
   };
 }
 
-export function syncAndDownload(accountId) {
+export function syncAndDownload(accountId?: string) {
   return async (dispatch: Dispatch) => {
     // It is *critical* that we sync first because of transaction
     // reconciliation. We want to get all transactions that other

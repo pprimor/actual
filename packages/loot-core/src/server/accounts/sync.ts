@@ -8,7 +8,11 @@ import {
   makeChild as makeChildTransaction,
   recalculateSplit,
 } from '../../shared/transactions';
-import { hasFieldsChanged, amountToInteger } from '../../shared/util';
+import {
+  hasFieldsChanged,
+  amountToInteger,
+  integerToAmount,
+} from '../../shared/util';
 import * as db from '../db';
 import { runMutator } from '../mutators';
 import { post } from '../post';
@@ -19,9 +23,6 @@ import { getStartingBalancePayee } from './payees';
 import { title } from './title';
 import { runRules } from './transaction-rules';
 import { batchUpdateTransactions } from './transactions';
-
-// Plaid article about API options:
-// https://support.plaid.com/customer/en/portal/articles/2612155-transactions-returned-per-request
 
 function BankSyncError(type: string, code: string) {
   return { type: 'BankSyncError', category: type, code };
@@ -60,22 +61,6 @@ async function updateAccountBalance(id, balance) {
   ]);
 }
 
-export async function getAccounts(userId, userKey, id) {
-  const res = await post(getServer().PLAID_SERVER + '/accounts', {
-    userId,
-    key: userKey,
-    item_id: id,
-  });
-
-  const { accounts } = res;
-
-  accounts.forEach(acct => {
-    acct.balances.current = getAccountBalance(acct);
-  });
-
-  return accounts;
-}
-
 export async function getGoCardlessAccounts(userId, userKey, id) {
   const userToken = await asyncStorage.getItem('user-token');
   if (!userToken) return;
@@ -101,89 +86,18 @@ export async function getGoCardlessAccounts(userId, userKey, id) {
   return accounts;
 }
 
-export function fromPlaid(trans) {
-  return {
-    imported_id: trans.transaction_id,
-    payee_name: trans.name,
-    imported_payee: trans.name,
-    amount: -amountToInteger(trans.amount),
-    date: trans.date,
-  };
-}
-
-async function downloadTransactions(
-  userId,
-  userKey,
-  acctId,
-  bankId,
-  since,
-  count?: number,
-) {
-  let allTransactions = [];
-  let accountBalance = null;
-  const pageSize = 100;
-  let offset = 0;
-  let numDownloaded = 0;
-
-  while (1) {
-    const endDate = monthUtils.currentDay();
-
-    const res = await post(getServer().PLAID_SERVER + '/transactions', {
-      userId,
-      key: userKey,
-      item_id: '' + bankId,
-      account_id: acctId,
-      start_date: since,
-      end_date: endDate,
-      count: pageSize,
-      offset,
-    });
-
-    if (res.error_code) {
-      throw BankSyncError(res.error_type, res.error_code);
-    }
-
-    if (res.transactions.length === 0) {
-      break;
-    }
-
-    numDownloaded += res.transactions.length;
-
-    // Remove pending transactions for now - we will handle them in
-    // the future.
-    allTransactions = allTransactions.concat(
-      res.transactions.filter(t => !t.pending),
-    );
-    accountBalance = getAccountBalance(res.accounts[0]);
-
-    if (
-      numDownloaded === res.total_transactions ||
-      (count != null && allTransactions.length >= count)
-    ) {
-      break;
-    }
-
-    offset += pageSize;
-  }
-
-  allTransactions =
-    count != null ? allTransactions.slice(0, count) : allTransactions;
-
-  return {
-    transactions: allTransactions.map(fromPlaid),
-    accountBalance,
-  };
-}
-
 async function downloadGoCardlessTransactions(
   userId,
   userKey,
   acctId,
   bankId,
   since,
+  includeBalance = true,
 ) {
   const userToken = await asyncStorage.getItem('user-token');
   if (!userToken) return;
+
+  console.log('Pulling transactions from GoCardless');
 
   const res = await post(
     getServer().GOCARDLESS_SERVER + '/transactions',
@@ -193,6 +107,7 @@ async function downloadGoCardlessTransactions(
       requisitionId: bankId,
       accountId: acctId,
       startDate: since,
+      includeBalance,
     },
     {
       'X-ACTUAL-TOKEN': userToken,
@@ -203,22 +118,34 @@ async function downloadGoCardlessTransactions(
     throw BankSyncError(res.error_type, res.error_code);
   }
 
-  const {
-    transactions: { all },
-    balances,
-    startingBalance,
-  } = res;
+  if (includeBalance) {
+    const {
+      transactions: { all },
+      balances,
+      startingBalance,
+    } = res;
 
-  return {
-    transactions: all,
-    accountBalance: balances,
-    startingBalance,
-  };
+    console.log('Response:', res);
+
+    return {
+      transactions: all,
+      accountBalance: balances,
+      startingBalance,
+    };
+  } else {
+    console.log('Response:', res);
+
+    return {
+      transactions: res.transactions.all,
+    };
+  }
 }
 
 async function downloadSimpleFinTransactions(acctId, since) {
   const userToken = await asyncStorage.getItem('user-token');
   if (!userToken) return;
+
+  console.log('Pulling transactions from SimpleFin');
 
   const res = await post(
     getServer().SIMPLEFIN_SERVER + '/transactions',
@@ -229,6 +156,7 @@ async function downloadSimpleFinTransactions(acctId, since) {
     {
       'X-ACTUAL-TOKEN': userToken,
     },
+    60000,
   );
 
   if (res.error_code) {
@@ -240,6 +168,8 @@ async function downloadSimpleFinTransactions(acctId, since) {
     balances,
     startingBalance,
   } = res;
+
+  console.log('Response:', res);
 
   return {
     transactions: all,
@@ -308,6 +238,8 @@ async function normalizeTransactions(
     trans.account = acctId;
     trans.payee = await resolvePayee(trans, payee_name, payeesToCreate);
 
+    trans.category = trans.category ?? null;
+
     normalized.push({
       payee_name,
       subtransactions: subtransactions
@@ -320,7 +252,7 @@ async function normalizeTransactions(
   return { normalized, payeesToCreate };
 }
 
-async function normalizeExternalTransactions(transactions, acctId) {
+async function normalizeBankSyncTransactions(transactions, acctId) {
   const payeesToCreate = new Map();
 
   const normalized = [];
@@ -335,55 +267,11 @@ async function normalizeExternalTransactions(transactions, acctId) {
       throw new Error('`date` is required when adding a transaction');
     }
 
-    let payee_name;
-    // When the amount is equal to 0, we need to determine
-    // if this is a "Credited" or "Debited" transaction. This means
-    // that it matters whether the amount is a positive or negative zero.
-    if (trans.amount > 0 || Object.is(Number(trans.amount), 0)) {
-      const nameParts = [];
-      const name =
-        trans.debtorName ||
-        trans.remittanceInformationUnstructured ||
-        (trans.remittanceInformationUnstructuredArray || []).join(', ') ||
-        trans.additionalInformation;
-
-      if (name) {
-        nameParts.push(title(name));
-      }
-      if (trans.debtorAccount && trans.debtorAccount.iban) {
-        nameParts.push(
-          '(' +
-            trans.debtorAccount.iban.slice(0, 4) +
-            ' XXX ' +
-            trans.debtorAccount.iban.slice(-4) +
-            ')',
-        );
-      }
-      payee_name = nameParts.join(' ');
-    } else {
-      const nameParts = [];
-      const name =
-        trans.creditorName ||
-        trans.remittanceInformationUnstructured ||
-        (trans.remittanceInformationUnstructuredArray || []).join(', ') ||
-        trans.additionalInformation;
-
-      if (name) {
-        nameParts.push(title(name));
-      }
-      if (trans.creditorAccount && trans.creditorAccount.iban) {
-        nameParts.push(
-          '(' +
-            trans.creditorAccount.iban.slice(0, 4) +
-            ' XXX ' +
-            trans.creditorAccount.iban.slice(-4) +
-            ')',
-        );
-      }
-      payee_name = nameParts.join(' ');
+    if (trans.payeeName == null) {
+      throw new Error('`payeeName` is required when adding a transaction');
     }
 
-    trans.imported_payee = trans.imported_payee || payee_name;
+    trans.imported_payee = trans.imported_payee || trans.payeeName;
     if (trans.imported_payee) {
       trans.imported_payee = trans.imported_payee.trim();
     }
@@ -392,20 +280,23 @@ async function normalizeExternalTransactions(transactions, acctId) {
     // when rules are run, they have the right data. Resolving payees
     // also simplifies the payee creation process
     trans.account = acctId;
-    trans.payee = await resolvePayee(trans, payee_name, payeesToCreate);
+    trans.payee = await resolvePayee(trans, trans.payeeName, payeesToCreate);
 
     trans.cleared = Boolean(trans.booked);
 
+    const notes =
+      trans.remittanceInformationUnstructured ||
+      (trans.remittanceInformationUnstructuredArray || []).join(', ');
+
     normalized.push({
-      payee_name,
+      payee_name: trans.payeeName,
       trans: {
         amount: amountToInteger(trans.amount),
         payee: trans.payee,
         account: trans.account,
         date: trans.date,
-        notes:
-          trans.remittanceInformationUnstructured ||
-          (trans.remittanceInformationUnstructuredArray || []).join(', '),
+        notes: notes.trim().replace('#', '##'),
+        category: trans.category ?? null,
         imported_id: trans.transactionId,
         imported_payee: trans.imported_payee,
         cleared: trans.cleared,
@@ -429,110 +320,38 @@ async function createNewPayees(payeesToCreate, addsAndUpdates) {
   });
 }
 
-export async function reconcileExternalTransactions(acctId, transactions) {
-  const hasMatched = new Set();
+export async function reconcileTransactions(
+  acctId,
+  transactions,
+  isBankSyncAccount = false,
+  strictIdChecking = true,
+  isPreview = false,
+) {
+  console.log('Performing transaction reconciliation');
+
   const updated = [];
   const added = [];
+  const updatedPreview = [];
+  const existingPayeeMap = new Map<string, string>();
 
-  const { normalized, payeesToCreate } = await normalizeExternalTransactions(
-    transactions,
+  const {
+    payeesToCreate,
+    transactionsStep1,
+    transactionsStep2,
+    transactionsStep3,
+  } = await matchTransactions(
     acctId,
+    transactions,
+    isBankSyncAccount,
+    strictIdChecking,
   );
-
-  // The first pass runs the rules, and preps data for fuzzy matching
-  const transactionsStep1 = [];
-  for (const {
-    payee_name,
-    trans: originalTrans,
-    subtransactions,
-  } of normalized) {
-    // Run the rules
-    const trans = runRules(originalTrans);
-
-    let match = null;
-    let fuzzyDataset = null;
-
-    // First, match with an existing transaction's imported_id. This
-    // is the highest fidelity match and should always be attempted
-    // first.
-    if (trans.imported_id) {
-      match = await db.first(
-        'SELECT * FROM v_transactions WHERE imported_id = ? AND account = ?',
-        [trans.imported_id, acctId],
-      );
-
-      if (match) {
-        hasMatched.add(match.id);
-      }
-    }
-
-    // If it didn't match, query data needed for fuzzy matching
-    if (!match) {
-      // Look 7 days ahead and 7 days back when fuzzy matching. This
-      // needs to select all fields that need to be read from the
-      // matched transaction. See the final pass below for the needed
-      // fields.
-      fuzzyDataset = await db.all(
-        `SELECT id, is_parent, date, imported_id, payee, category, notes, reconciled FROM v_transactions
-           WHERE date >= ? AND date <= ? AND amount = ? AND account = ?`,
-        [
-          db.toDateRepr(monthUtils.subDays(trans.date, 7)),
-          db.toDateRepr(monthUtils.addDays(trans.date, 7)),
-          trans.amount || 0,
-          acctId,
-        ],
-      );
-    }
-
-    transactionsStep1.push({
-      payee_name,
-      trans,
-      subtransactions: trans.subtransactions || subtransactions,
-      match,
-      fuzzyDataset,
-    });
-  }
-
-  // Next, do the fuzzy matching. This first pass matches based on the
-  // payee id. We do this in multiple passes so that higher fidelity
-  // matching always happens first, i.e. a transaction should match
-  // match with low fidelity if a later transaction is going to match
-  // the same one with high fidelity.
-  const transactionsStep2 = transactionsStep1.map(data => {
-    if (!data.match && data.fuzzyDataset) {
-      // Try to find one where the payees match.
-      const match = data.fuzzyDataset.find(
-        row => !hasMatched.has(row.id) && data.trans.payee === row.payee,
-      );
-
-      if (match) {
-        hasMatched.add(match.id);
-        return { ...data, match };
-      }
-    }
-    return data;
-  });
-
-  // The final fuzzy matching pass. This is the lowest fidelity
-  // matching: it just find the first transaction that hasn't been
-  // matched yet. Remember the the dataset only contains transactions
-  // around the same date with the same amount.
-  const transactionsStep3 = transactionsStep2.map(data => {
-    if (!data.match && data.fuzzyDataset) {
-      const match = data.fuzzyDataset.find(row => !hasMatched.has(row.id));
-      if (match) {
-        hasMatched.add(match.id);
-        return { ...data, match };
-      }
-    }
-    return data;
-  });
 
   // Finally, generate & commit the changes
   for (const { trans, subtransactions, match } of transactionsStep3) {
-    if (match) {
+    if (match && !trans.forceAddTransaction) {
       // Skip updating already reconciled (locked) transactions
       if (match.reconciled) {
+        updatedPreview.push({ transaction: trans, ignored: true });
         continue;
       }
 
@@ -555,6 +374,15 @@ export async function reconcileExternalTransactions(acctId, transactions) {
 
       if (hasFieldsChanged(existing, updates, Object.keys(updates))) {
         updated.push({ id: existing.id, ...updates });
+        if (!existingPayeeMap.has(existing.payee)) {
+          const payee = await db.getPayee(existing.payee);
+          existingPayeeMap.set(existing.payee, payee?.name);
+        }
+        existing.payee_name = existingPayeeMap.get(existing.payee);
+        existing.amount = integerToAmount(existing.amount);
+        updatedPreview.push({ transaction: trans, existing });
+      } else {
+        updatedPreview.push({ transaction: trans, ignored: true });
       }
 
       if (existing.is_parent && existing.cleared !== updates.cleared) {
@@ -568,8 +396,9 @@ export async function reconcileExternalTransactions(acctId, transactions) {
       }
     } else {
       // Insert a new transaction
+      const { forceAddTransaction, ...newTrans } = trans;
       const finalTransaction = {
-        ...trans,
+        ...newTrans,
         id: uuidv4(),
         category: trans.category || null,
         cleared: trans.cleared != null ? trans.cleared : true,
@@ -583,21 +412,42 @@ export async function reconcileExternalTransactions(acctId, transactions) {
     }
   }
 
-  await createNewPayees(payeesToCreate, [...added, ...updated]);
-  await batchUpdateTransactions({ added, updated });
+  if (!isPreview) {
+    await createNewPayees(payeesToCreate, [...added, ...updated]);
+    await batchUpdateTransactions({ added, updated });
+  }
+
+  console.log('Debug data for the operations:', {
+    transactionsStep1,
+    transactionsStep2,
+    transactionsStep3,
+    added,
+    updated,
+    updatedPreview,
+  });
 
   return {
     added: added.map(trans => trans.id),
     updated: updated.map(trans => trans.id),
+    updatedPreview,
   };
 }
 
-export async function reconcileTransactions(acctId, transactions) {
-  const hasMatched = new Set();
-  const updated = [];
-  const added = [];
+export async function matchTransactions(
+  acctId,
+  transactions,
+  isBankSyncAccount = false,
+  strictIdChecking = true,
+) {
+  console.log('Performing transaction reconciliation matching');
 
-  const { normalized, payeesToCreate } = await normalizeTransactions(
+  const hasMatched = new Set();
+
+  const transactionNormalization = isBankSyncAccount
+    ? normalizeBankSyncTransactions
+    : normalizeTransactions;
+
+  const { normalized, payeesToCreate } = await transactionNormalization(
     transactions,
     acctId,
   );
@@ -631,20 +481,59 @@ export async function reconcileTransactions(acctId, transactions) {
 
     // If it didn't match, query data needed for fuzzy matching
     if (!match) {
-      // Look 7 days ahead and 7 days back when fuzzy matching. This
+      // Fuzzy matching looks 7 days ahead and 7 days back. This
       // needs to select all fields that need to be read from the
       // matched transaction. See the final pass below for the needed
       // fields.
-      fuzzyDataset = await db.all(
-        `SELECT id, is_parent, date, imported_id, payee, category, notes, reconciled FROM v_transactions
-           WHERE date >= ? AND date <= ? AND amount = ? AND account = ?`,
-        [
-          db.toDateRepr(monthUtils.subDays(trans.date, 7)),
-          db.toDateRepr(monthUtils.addDays(trans.date, 7)),
-          trans.amount || 0,
-          acctId,
-        ],
-      );
+      const sevenDaysBefore = db.toDateRepr(monthUtils.subDays(trans.date, 7));
+      const sevenDaysAfter = db.toDateRepr(monthUtils.addDays(trans.date, 7));
+      // strictIdChecking has the added behaviour of only matching on transactions with no import ID
+      // if the transaction being imported has an import ID.
+      if (strictIdChecking) {
+        fuzzyDataset = await db.all(
+          `SELECT id, is_parent, date, imported_id, payee, imported_payee, category, notes, reconciled, cleared, amount
+          FROM v_transactions
+          WHERE
+            -- If both ids are set, and we didn't match earlier then skip dedup
+            (imported_id IS NULL OR ? IS NULL)
+            AND date >= ? AND date <= ? AND amount = ?
+            AND account = ?`,
+          [
+            trans.imported_id || null,
+            sevenDaysBefore,
+            sevenDaysAfter,
+            trans.amount || 0,
+            acctId,
+          ],
+        );
+      } else {
+        fuzzyDataset = await db.all(
+          `SELECT id, is_parent, date, imported_id, payee, imported_payee, category, notes, reconciled, cleared, amount
+          FROM v_transactions
+          WHERE date >= ? AND date <= ? AND amount = ? AND account = ?`,
+          [sevenDaysBefore, sevenDaysAfter, trans.amount || 0, acctId],
+        );
+      }
+
+      // Sort the matched transactions according to the distance from the original
+      // transactions date. i.e. if the original transaction is in 21-02-2024 and
+      // the matched transactions are: 20-02-2024, 21-02-2024, 29-02-2024 then
+      // the resulting data-set should be: 21-02-2024, 20-02-2024, 29-02-2024.
+      fuzzyDataset = fuzzyDataset.sort((a, b) => {
+        const aDistance = Math.abs(
+          dateFns.differenceInMilliseconds(
+            dateFns.parseISO(trans.date),
+            dateFns.parseISO(db.fromDateRepr(a.date)),
+          ),
+        );
+        const bDistance = Math.abs(
+          dateFns.differenceInMilliseconds(
+            dateFns.parseISO(trans.date),
+            dateFns.parseISO(db.fromDateRepr(b.date)),
+          ),
+        );
+        return aDistance > bDistance ? 1 : -1;
+      });
     }
 
     transactionsStep1.push({
@@ -678,7 +567,7 @@ export async function reconcileTransactions(acctId, transactions) {
 
   // The final fuzzy matching pass. This is the lowest fidelity
   // matching: it just find the first transaction that hasn't been
-  // matched yet. Remember the the dataset only contains transactions
+  // matched yet. Remember the dataset only contains transactions
   // around the same date with the same amount.
   const transactionsStep3 = transactionsStep2.map(data => {
     if (!data.match && data.fuzzyDataset) {
@@ -691,68 +580,11 @@ export async function reconcileTransactions(acctId, transactions) {
     return data;
   });
 
-  // Finally, generate & commit the changes
-  for (const { trans, subtransactions, match } of transactionsStep3) {
-    if (match) {
-      // Skip updating already reconciled (locked) transactions
-      if (match.reconciled) {
-        continue;
-      }
-
-      // TODO: change the above sql query to use aql
-      const existing = {
-        ...match,
-        cleared: match.cleared === 1,
-        date: db.fromDateRepr(match.date),
-      };
-
-      // Update the transaction
-      const updates = {
-        date: trans.date,
-        imported_id: trans.imported_id || null,
-        payee: existing.payee || trans.payee || null,
-        category: existing.category || trans.category || null,
-        imported_payee: trans.imported_payee || null,
-        notes: existing.notes || trans.notes || null,
-        cleared: trans.cleared != null ? trans.cleared : true,
-      };
-
-      if (hasFieldsChanged(existing, updates, Object.keys(updates))) {
-        updated.push({ id: existing.id, ...updates });
-      }
-
-      if (existing.is_parent && existing.cleared !== updates.cleared) {
-        const children = await db.all(
-          'SELECT id FROM v_transactions WHERE parent_id = ?',
-          [existing.id],
-        );
-        for (const child of children) {
-          updated.push({ id: child.id, cleared: updates.cleared });
-        }
-      }
-    } else {
-      // Insert a new transaction
-      const finalTransaction = {
-        ...trans,
-        id: uuidv4(),
-        category: trans.category || null,
-        cleared: trans.cleared != null ? trans.cleared : true,
-      };
-
-      if (subtransactions && subtransactions.length > 0) {
-        added.push(...makeSplitTransaction(finalTransaction, subtransactions));
-      } else {
-        added.push(finalTransaction);
-      }
-    }
-  }
-
-  await createNewPayees(payeesToCreate, [...added, ...updated]);
-  await batchUpdateTransactions({ added, updated });
-
   return {
-    added: added.map(trans => trans.id),
-    updated: updated.map(trans => trans.id),
+    payeesToCreate,
+    transactionsStep1,
+    transactionsStep2,
+    transactionsStep3,
   };
 }
 
@@ -814,7 +646,13 @@ export async function addTransactions(
   return newTransactions;
 }
 
-export async function syncExternalAccount(userId, userKey, id, acctId, bankId) {
+export async function syncAccount(
+  userId: string,
+  userKey: string,
+  id: string,
+  acctId: string,
+  bankId: string,
+) {
   // TODO: Handle the case where transactions exist in the future
   // (that will make start date after end date)
   const latestTransaction = await db.first(
@@ -823,15 +661,18 @@ export async function syncExternalAccount(userId, userKey, id, acctId, bankId) {
   );
 
   const acctRow = await db.select('accounts', id);
+  // If syncing an account from sync source it must not use strictIdChecking. This allows
+  // the fuzzy search to match transactions where the import IDs are different. It is a known quirk
+  // that account sync sources can give two different transaction IDs even though it's the same transaction.
+  const useStrictIdChecking = !acctRow.account_sync_source;
 
   if (latestTransaction) {
     const startingTransaction = await db.first(
       'SELECT date FROM v_transactions WHERE account = ? ORDER BY date ASC LIMIT 1',
       [id],
     );
-    const startingDate = monthUtils.parseDate(
-      db.fromDateRepr(startingTransaction.date),
-    );
+    const startingDate = db.fromDateRepr(startingTransaction.date);
+    // assert(startingTransaction)
 
     const startDate = monthUtils.dayFromDate(
       dateFns.max([
@@ -840,7 +681,7 @@ export async function syncExternalAccount(userId, userKey, id, acctId, bankId) {
         monthUtils.parseDate(monthUtils.subDays(monthUtils.currentDay(), 90)),
 
         // Never download transactions before the starting date.
-        startingDate,
+        monthUtils.parseDate(startingDate),
       ]),
     );
 
@@ -855,6 +696,11 @@ export async function syncExternalAccount(userId, userKey, id, acctId, bankId) {
         acctId,
         bankId,
         startDate,
+        false,
+      );
+    } else {
+      throw new Error(
+        `Unrecognized bank-sync provider: ${acctRow.account_sync_source}`,
       );
     }
 
@@ -870,15 +716,22 @@ export async function syncExternalAccount(userId, userKey, id, acctId, bankId) {
     }));
 
     return runMutator(async () => {
-      const result = await reconcileExternalTransactions(id, transactions);
-      await updateAccountBalance(id, accountBalance);
+      const result = await reconcileTransactions(
+        id,
+        transactions,
+        true,
+        useStrictIdChecking,
+      );
+
+      if (accountBalance) await updateAccountBalance(id, accountBalance);
+
       return result;
     });
   } else {
+    let download;
+
     // Otherwise, download transaction for the past 90 days
     const startingDay = monthUtils.subDays(monthUtils.currentDay(), 90);
-
-    let download;
 
     if (acctRow.account_sync_source === 'simpleFin') {
       download = await downloadSimpleFinTransactions(acctId, startingDay);
@@ -889,15 +742,15 @@ export async function syncExternalAccount(userId, userKey, id, acctId, bankId) {
         acctId,
         bankId,
         startingDay,
+        true,
       );
     }
 
-    const { transactions, startingBalance } = download;
-
-    let balanceToUse = startingBalance;
+    const { transactions } = download;
+    let balanceToUse = download.startingBalance;
 
     if (acctRow.account_sync_source === 'simpleFin') {
-      const currentBalance = startingBalance;
+      const currentBalance = download.startingBalance;
       const previousBalance = transactions.reduce((total, trans) => {
         return (
           total - parseInt(trans.transactionAmount.amount.replace('.', ''))
@@ -926,109 +779,12 @@ export async function syncExternalAccount(userId, userKey, id, acctId, bankId) {
         starting_balance_flag: true,
       });
 
-      const result = await reconcileExternalTransactions(id, transactions);
-      return {
-        ...result,
-        added: [initialId, ...result.added],
-      };
-    });
-  }
-}
-
-export async function syncAccount(userId, userKey, id, acctId, bankId) {
-  // TODO: Handle the case where transactions exist in the future
-  // (that will make start date after end date)
-  const latestTransaction = await db.first(
-    'SELECT * FROM v_transactions WHERE account = ? ORDER BY date DESC LIMIT 1',
-    [id],
-  );
-
-  if (latestTransaction) {
-    const startingTransaction = await db.first(
-      'SELECT date FROM v_transactions WHERE account = ? ORDER BY date ASC LIMIT 1',
-      [id],
-    );
-    const startingDate = db.fromDateRepr(startingTransaction.date);
-    // assert(startingTransaction)
-
-    // Get all transactions since the latest transaction, plus any 5
-    // days before the latest transaction. This gives us a chance to
-    // resolve any transactions that were entered manually.
-    //
-    // TODO: What this really should do is query the last imported_id
-    // and since then
-    let date = monthUtils.subDays(db.fromDateRepr(latestTransaction.date), 31);
-
-    // Never download transactions before the starting date. This was
-    // when the account was added to the system.
-    if (date < startingDate) {
-      date = startingDate;
-    }
-
-    const { transactions: originalTransactions, accountBalance } =
-      await downloadTransactions(userId, userKey, acctId, bankId, date);
-    if (originalTransactions.length === 0) {
-      return { added: [], updated: [] };
-    }
-
-    const transactions = originalTransactions.map(trans => ({
-      ...trans,
-      account: id,
-    }));
-
-    return runMutator(async () => {
-      const result = await reconcileTransactions(id, transactions);
-      await updateAccountBalance(id, accountBalance);
-      return result;
-    });
-  } else {
-    const acctRow = await db.select('accounts', id);
-
-    // Otherwise, download transaction for the last few days if it's an
-    // on-budget account, or for the past 30 days if off-budget
-    const startingDay = monthUtils.subDays(
-      monthUtils.currentDay(),
-      acctRow.offbudget === 0 ? 1 : 30,
-    );
-
-    const { transactions } = await downloadTransactions(
-      userId,
-      userKey,
-      acctId,
-      bankId,
-      dateFns.format(dateFns.parseISO(startingDay), 'yyyy-MM-dd'),
-    );
-
-    // We need to add a transaction that represents the starting
-    // balance for everything to balance out. In order to get balance
-    // before the first imported transaction, we need to get the
-    // current balance from the accounts table and subtract all the
-    // imported transactions.
-    const currentBalance = acctRow.balance_current;
-
-    const previousBalance = transactions.reduce((total, trans) => {
-      return total - trans.amount;
-    }, currentBalance);
-
-    const oldestDate =
-      transactions.length > 0
-        ? transactions[transactions.length - 1].date
-        : monthUtils.currentDay();
-
-    const payee = await getStartingBalancePayee();
-
-    return runMutator(async () => {
-      const initialId = await db.insertTransaction({
-        account: id,
-        amount: previousBalance,
-        category: acctRow.offbudget === 0 ? payee.category : null,
-        payee: payee.id,
-        date: oldestDate,
-        cleared: true,
-        starting_balance_flag: true,
-      });
-
-      const result = await reconcileTransactions(id, transactions);
+      const result = await reconcileTransactions(
+        id,
+        transactions,
+        true,
+        useStrictIdChecking,
+      );
       return {
         ...result,
         added: [initialId, ...result.added],

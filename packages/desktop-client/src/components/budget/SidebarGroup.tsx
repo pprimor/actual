@@ -1,17 +1,18 @@
 // @ts-strict-ignore
-import React, { type CSSProperties, useState } from 'react';
+import React, { type CSSProperties, useRef, useState } from 'react';
 import { type ConnectDragSource } from 'react-dnd';
+import { useTranslation } from 'react-i18next';
 
 import { SvgExpandArrow } from '../../icons/v0';
 import { SvgCheveronDown } from '../../icons/v1';
 import { theme } from '../../style';
-import { Button } from '../common/Button';
+import { Button } from '../common/Button2';
 import { Menu } from '../common/Menu';
+import { Popover } from '../common/Popover';
 import { Text } from '../common/Text';
 import { View } from '../common/View';
 import { NotesButton } from '../NotesButton';
 import { InputCell } from '../table';
-import { Tooltip } from '../tooltips';
 
 type SidebarGroupProps = {
   group: {
@@ -50,8 +51,11 @@ export function SidebarGroup({
   onHideNewGroup,
   onToggleCollapse,
 }: SidebarGroupProps) {
+  const { t } = useTranslation();
+
   const temporary = group.id === 'new';
   const [menuOpen, setMenuOpen] = useState(false);
+  const triggerRef = useRef(null);
 
   const displayed = (
     <View
@@ -91,57 +95,56 @@ export function SidebarGroup({
       </div>
       {!dragPreview && (
         <>
-          <View style={{ marginLeft: 5, flexShrink: 0 }}>
+          <View style={{ marginLeft: 5, flexShrink: 0 }} ref={triggerRef}>
             <Button
-              type="bare"
+              variant="bare"
               className="hover-visible"
-              onClick={e => {
-                e.stopPropagation();
-                setMenuOpen(true);
-              }}
+              onPress={() => setMenuOpen(true)}
               style={{ padding: 3 }}
             >
               <SvgCheveronDown width={14} height={14} />
             </Button>
-            {menuOpen && (
-              <Tooltip
-                position="bottom-left"
-                width={200}
-                style={{ padding: 0 }}
-                onClose={() => setMenuOpen(false)}
-              >
-                <Menu
-                  onMenuSelect={type => {
-                    if (type === 'rename') {
-                      onEdit(group.id);
-                    } else if (type === 'add-category') {
-                      onShowNewCategory(group.id);
-                    } else if (type === 'delete') {
-                      onDelete(group.id);
-                    } else if (type === 'toggle-visibility') {
-                      onSave({ ...group, hidden: !group.hidden });
-                    }
-                    setMenuOpen(false);
-                  }}
-                  items={[
-                    { name: 'add-category', text: 'Add category' },
-                    {
-                      name: 'toggle-visibility',
-                      text: group.hidden ? 'Show' : 'Hide',
-                    },
-                    { name: 'rename', text: 'Rename' },
-                    onDelete && { name: 'delete', text: 'Delete' },
-                  ]}
-                />
-              </Tooltip>
-            )}
+
+            <Popover
+              triggerRef={triggerRef}
+              placement="bottom start"
+              isOpen={menuOpen}
+              onOpenChange={() => setMenuOpen(false)}
+              style={{ width: 200 }}
+            >
+              <Menu
+                onMenuSelect={type => {
+                  if (type === 'rename') {
+                    onEdit(group.id);
+                  } else if (type === 'add-category') {
+                    onShowNewCategory(group.id);
+                  } else if (type === 'delete') {
+                    onDelete(group.id);
+                  } else if (type === 'toggle-visibility') {
+                    onSave({ ...group, hidden: !group.hidden });
+                  }
+                  setMenuOpen(false);
+                }}
+                items={[
+                  { name: 'add-category', text: t('Add category') },
+                  { name: 'rename', text: t('Rename') },
+                  !group.is_income && {
+                    name: 'toggle-visibility',
+                    text: group.hidden ? t('Show') : t('Hide'),
+                  },
+                  onDelete && { name: 'delete', text: t('Delete') },
+                ]}
+              />
+            </Popover>
           </View>
           <View style={{ flex: 1 }} />
-          <NotesButton
-            id={group.id}
-            style={dragPreview && { color: 'currentColor' }}
-            defaultColor={theme.pageTextLight}
-          />
+          <View style={{ flexShrink: 0 }}>
+            <NotesButton
+              id={group.id}
+              style={dragPreview && { color: 'currentColor' }}
+              defaultColor={theme.pageTextLight}
+            />
+          </View>
         </>
       )}
     </View>
@@ -197,7 +200,7 @@ export function SidebarGroup({
         style={{ fontWeight: 600 }}
         inputProps={{
           style: { marginLeft: 20 },
-          placeholder: temporary ? 'New Group Name' : '',
+          placeholder: temporary ? t('New Group Name') : '',
         }}
       />
     </View>

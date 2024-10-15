@@ -1,80 +1,96 @@
 // @ts-strict-ignore
 import React, { useEffect, useState } from 'react';
+import { DndProvider } from 'react-dnd';
+import { HTML5Backend } from 'react-dnd-html5-backend';
 import {
   ErrorBoundary,
   useErrorBoundary,
   type FallbackProps,
 } from 'react-error-boundary';
-import { useSelector } from 'react-redux';
+import { HotkeysProvider } from 'react-hotkeys-hook';
+import { useTranslation } from 'react-i18next';
+import { useDispatch } from 'react-redux';
+import { BrowserRouter } from 'react-router-dom';
 
-import { type State } from 'loot-core/client/state-types';
-import { type AppState } from 'loot-core/client/state-types/app';
-import { type PrefsState } from 'loot-core/client/state-types/prefs';
+import {
+  closeBudget,
+  loadBudget,
+  loadGlobalPrefs,
+  setAppState,
+  sync,
+} from 'loot-core/client/actions';
+import { SpreadsheetProvider } from 'loot-core/client/SpreadsheetProvider';
 import * as Platform from 'loot-core/src/client/platform';
 import {
   init as initConnection,
   send,
 } from 'loot-core/src/platform/client/fetch';
-import { type GlobalPrefs } from 'loot-core/src/types/prefs';
 
-import { useActions } from '../hooks/useActions';
+import { useMetadataPref } from '../hooks/useMetadataPref';
 import { installPolyfills } from '../polyfills';
 import { ResponsiveProvider } from '../ResponsiveProvider';
-import { styles, hasHiddenScrollbars, ThemeStyle } from '../style';
+import { styles, hasHiddenScrollbars, ThemeStyle, useTheme } from '../style';
+import { ExposeNavigate } from '../util/router-tools';
 
 import { AppBackground } from './AppBackground';
+import { BudgetMonthCountProvider } from './budget/BudgetMonthCountContext';
 import { View } from './common/View';
 import { DevelopmentTopBar } from './DevelopmentTopBar';
 import { FatalError } from './FatalError';
 import { FinancesApp } from './FinancesApp';
 import { ManagementApp } from './manager/ManagementApp';
-import { MobileWebMessage } from './MobileWebMessage';
+import { Modals } from './Modals';
+import { ScrollProvider } from './ScrollProvider';
+import { SidebarProvider } from './sidebar/SidebarProvider';
 import { UpdateNotification } from './UpdateNotification';
 
-type AppInnerProps = {
-  budgetId: string;
-  cloudFileId: string;
-  loadingText: string;
-  loadBudget: (
-    id: string,
-    loadingText?: string,
-    options?: object,
-  ) => Promise<void>;
-  closeBudget: () => Promise<void>;
-  loadGlobalPrefs: () => Promise<GlobalPrefs>;
-};
-
-function AppInner({
-  budgetId,
-  cloudFileId,
-  loadingText,
-  loadBudget,
-  closeBudget,
-  loadGlobalPrefs,
-}: AppInnerProps) {
-  const [initializing, setInitializing] = useState(true);
+function AppInner() {
+  const [budgetId] = useMetadataPref('id');
+  const [cloudFileId] = useMetadataPref('cloudFileId');
+  const { t } = useTranslation();
   const { showBoundary: showErrorBoundary } = useErrorBoundary();
+  const dispatch = useDispatch();
 
   async function init() {
     const socketName = await global.Actual.getServerSocket();
 
+    dispatch(
+      setAppState({
+        loadingText: t('Initializing the connection to the local database...'),
+      }),
+    );
     await initConnection(socketName);
 
     // Load any global prefs
-    await loadGlobalPrefs();
+    dispatch(
+      setAppState({
+        loadingText: t('Loading global preferences...'),
+      }),
+    );
+    await dispatch(loadGlobalPrefs());
 
     // Open the last opened budget, if any
+    dispatch(
+      setAppState({
+        loadingText: t('Opening last budget...'),
+      }),
+    );
     const budgetId = await send('get-last-opened-backup');
     if (budgetId) {
-      await loadBudget(budgetId);
+      await dispatch(loadBudget(budgetId));
 
       // Check to see if this file has been remotely deleted (but
       // don't block on this in case they are offline or something)
+      dispatch(
+        setAppState({
+          loadingText: t('Retrieving remote files...'),
+        }),
+      );
       send('get-remote-files').then(files => {
         if (files) {
           const remoteFile = files.find(f => f.fileId === cloudFileId);
           if (remoteFile && remoteFile.deleted) {
-            closeBudget();
+            dispatch(closeBudget());
           }
         }
       });
@@ -84,61 +100,33 @@ function AppInner({
   useEffect(() => {
     async function initAll() {
       await Promise.all([installPolyfills(), init()]);
-      setInitializing(false);
+      dispatch(setAppState({ loadingText: null }));
     }
 
     initAll().catch(showErrorBoundary);
   }, []);
 
   useEffect(() => {
-    global.Actual.updateAppMenu(!!budgetId);
+    global.Actual.updateAppMenu(budgetId);
   }, [budgetId]);
 
-  return (
-    <>
-      {initializing ? (
-        <AppBackground initializing={initializing} loadingText={loadingText} />
-      ) : budgetId ? (
-        <FinancesApp />
-      ) : (
-        <>
-          <AppBackground
-            initializing={initializing}
-            loadingText={loadingText}
-          />
-          <ManagementApp isLoading={loadingText != null} />
-        </>
-      )}
-
-      <UpdateNotification />
-      <MobileWebMessage />
-    </>
-  );
+  return budgetId ? <FinancesApp /> : <ManagementApp />;
 }
 
 function ErrorFallback({ error }: FallbackProps) {
   return (
     <>
       <AppBackground />
-      <FatalError error={error} buttonText="Restart app" />
+      <FatalError error={error} />
     </>
   );
 }
 
 export function App() {
-  const budgetId = useSelector<State, PrefsState['local']['id']>(
-    state => state.prefs.local && state.prefs.local.id,
-  );
-  const cloudFileId = useSelector<State, PrefsState['local']['cloudFileId']>(
-    state => state.prefs.local && state.prefs.local.cloudFileId,
-  );
-  const loadingText = useSelector<State, AppState['loadingText']>(
-    state => state.app.loadingText,
-  );
-  const { loadBudget, closeBudget, loadGlobalPrefs, sync } = useActions();
   const [hiddenScrollbars, setHiddenScrollbars] = useState(
     hasHiddenScrollbars(),
   );
+  const dispatch = useDispatch();
 
   useEffect(() => {
     function checkScrollbars() {
@@ -153,7 +141,7 @@ export function App() {
       if (!isSyncing) {
         console.debug('triggering sync because of visibility change');
         isSyncing = true;
-        await sync();
+        await dispatch(sync());
         isSyncing = false;
       }
     }
@@ -165,37 +153,55 @@ export function App() {
       window.removeEventListener('focus', checkScrollbars);
       window.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, [sync]);
+  }, [dispatch]);
+
+  const [theme] = useTheme();
 
   return (
-    <ResponsiveProvider>
-      <View
-        style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
-      >
-        <View
-          key={hiddenScrollbars ? 'hidden-scrollbars' : 'scrollbars'}
-          style={{
-            flexGrow: 1,
-            overflow: 'hidden',
-            ...styles.lightScrollbar,
-          }}
-        >
-          <ErrorBoundary FallbackComponent={ErrorFallback}>
-            {process.env.REACT_APP_REVIEW_ID && !Platform.isPlaywright && (
-              <DevelopmentTopBar />
-            )}
-            <AppInner
-              budgetId={budgetId}
-              cloudFileId={cloudFileId}
-              loadingText={loadingText}
-              loadBudget={loadBudget}
-              closeBudget={closeBudget}
-              loadGlobalPrefs={loadGlobalPrefs}
-            />
-          </ErrorBoundary>
-          <ThemeStyle />
-        </View>
-      </View>
-    </ResponsiveProvider>
+    <BrowserRouter>
+      <ExposeNavigate />
+      <HotkeysProvider initiallyActiveScopes={['*']}>
+        <ResponsiveProvider>
+          <SpreadsheetProvider>
+            <SidebarProvider>
+              <BudgetMonthCountProvider>
+                <DndProvider backend={HTML5Backend}>
+                  <ScrollProvider>
+                    <View
+                      data-theme={theme}
+                      style={{
+                        height: '100%',
+                        display: 'flex',
+                        flexDirection: 'column',
+                      }}
+                    >
+                      <View
+                        key={
+                          hiddenScrollbars ? 'hidden-scrollbars' : 'scrollbars'
+                        }
+                        style={{
+                          flexGrow: 1,
+                          overflow: 'hidden',
+                          ...styles.lightScrollbar,
+                        }}
+                      >
+                        <ErrorBoundary FallbackComponent={ErrorFallback}>
+                          {process.env.REACT_APP_REVIEW_ID &&
+                            !Platform.isPlaywright && <DevelopmentTopBar />}
+                          <AppInner />
+                        </ErrorBoundary>
+                        <ThemeStyle />
+                        <Modals />
+                        <UpdateNotification />
+                      </View>
+                    </View>
+                  </ScrollProvider>
+                </DndProvider>
+              </BudgetMonthCountProvider>
+            </SidebarProvider>
+          </SpreadsheetProvider>
+        </ResponsiveProvider>
+      </HotkeysProvider>
+    </BrowserRouter>
   );
 }

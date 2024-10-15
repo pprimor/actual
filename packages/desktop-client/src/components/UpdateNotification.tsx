@@ -1,26 +1,22 @@
 import React from 'react';
 import { useSelector } from 'react-redux';
 
-import { type State } from 'loot-core/client/state-types';
-import { type AppState } from 'loot-core/client/state-types/app';
+import { type State } from 'loot-core/src/client/state-types';
 
 import { useActions } from '../hooks/useActions';
 import { SvgClose } from '../icons/v1';
 import { theme } from '../style';
 
-import { Button } from './common/Button';
-import { LinkButton } from './common/LinkButton';
+import { Button } from './common/Button2';
+import { Link } from './common/Link';
 import { Text } from './common/Text';
 import { View } from './common/View';
 
 export function UpdateNotification() {
-  const updateInfo = useSelector<State, AppState['updateInfo']>(
-    state => state.app.updateInfo,
+  const updateInfo = useSelector((state: State) => state.app.updateInfo);
+  const showUpdateNotification = useSelector(
+    (state: State) => state.app.showUpdateNotification,
   );
-  const showUpdateNotification = useSelector<
-    State,
-    AppState['showUpdateNotification']
-  >(state => state.app.showUpdateNotification);
 
   const { updateApp, setAppState } = useActions();
 
@@ -49,7 +45,8 @@ export function UpdateNotification() {
           <View style={{ flex: 1 }} />
           <View style={{ marginTop: -1 }}>
             <Text>
-              <LinkButton
+              <Link
+                variant="text"
                 onClick={updateApp}
                 style={{
                   color: theme.buttonPrimaryText,
@@ -57,9 +54,10 @@ export function UpdateNotification() {
                 }}
               >
                 Restart
-              </LinkButton>{' '}
+              </Link>{' '}
               (
-              <LinkButton
+              <Link
+                variant="text"
                 style={{
                   color: theme.buttonPrimaryText,
                   textDecoration: 'underline',
@@ -71,13 +69,13 @@ export function UpdateNotification() {
                 }
               >
                 notes
-              </LinkButton>
+              </Link>
               )
               <Button
-                type="bare"
+                variant="bare"
                 aria-label="Close"
                 style={{ display: 'inline', padding: '1px 7px 2px 7px' }}
-                onClick={() => {
+                onPress={() => {
                   // Set a flag to never show an update notification again for this session
                   setAppState({
                     updateInfo: null,

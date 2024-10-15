@@ -6,6 +6,7 @@ import { looselyParseAmount } from '../../shared/util';
 
 import { ofx2json } from './ofx2json';
 import { qif2json } from './qif2json';
+import { xmlCAMT2json } from './xmlcamt2json';
 
 type ParseError = { message: string; internal: string };
 export type ParseFileResult = {
@@ -17,6 +18,7 @@ type ParseFileOptions = {
   hasHeaderRow?: boolean;
   delimiter?: string;
   fallbackMissingPayeeToMemo?: boolean;
+  skipLines?: number;
 };
 
 export async function parseFile(
@@ -38,6 +40,8 @@ export async function parseFile(
       case '.ofx':
       case '.qfx':
         return parseOFX(filepath, options);
+      case '.xml':
+        return parseCAMT(filepath);
       default:
     }
   }
@@ -54,7 +58,12 @@ async function parseCSV(
   options: ParseFileOptions,
 ): Promise<ParseFileResult> {
   const errors = Array<ParseError>();
-  const contents = await fs.readFile(filepath);
+  let contents = await fs.readFile(filepath);
+
+  if (options.skipLines > 0) {
+    const lines = contents.split(/\r?\n/);
+    contents = lines.slice(options.skipLines).join('\r\n');
+  }
 
   let data;
   try {
@@ -96,13 +105,15 @@ async function parseQIF(filepath: string): Promise<ParseFileResult> {
 
   return {
     errors: [],
-    transactions: data.transactions.map(trans => ({
-      amount: trans.amount != null ? looselyParseAmount(trans.amount) : null,
-      date: trans.date,
-      payee_name: trans.payee,
-      imported_payee: trans.payee,
-      notes: trans.memo || null,
-    })),
+    transactions: data.transactions
+      .map(trans => ({
+        amount: trans.amount != null ? looselyParseAmount(trans.amount) : null,
+        date: trans.date,
+        payee_name: trans.payee,
+        imported_payee: trans.payee,
+        notes: trans.memo || null,
+      }))
+      .filter(trans => trans.date != null && trans.amount != null),
   };
 }
 
@@ -141,4 +152,23 @@ async function parseOFX(
       };
     }),
   };
+}
+
+async function parseCAMT(filepath: string): Promise<ParseFileResult> {
+  const errors = Array<ParseError>();
+  const contents = await fs.readFile(filepath);
+
+  let data;
+  try {
+    data = await xmlCAMT2json(contents);
+  } catch (err) {
+    console.error(err);
+    errors.push({
+      message: 'Failed importing file',
+      internal: err.stack,
+    });
+    return { errors };
+  }
+
+  return { errors, transactions: data };
 }

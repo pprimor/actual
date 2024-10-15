@@ -1,13 +1,12 @@
 import React from 'react';
-import { useSelector } from 'react-redux';
 
-import { type State } from 'loot-core/client/state-types';
-import { type QueriesState } from 'loot-core/client/state-types/queries';
 import { getPayeesById } from 'loot-core/src/client/reducers/queries';
 import { describeSchedule } from 'loot-core/src/shared/schedules';
 import { type ScheduleEntity } from 'loot-core/src/types/models';
 
-import { SchedulesQuery } from './SchedulesQuery';
+import { usePayees } from '../../hooks/usePayees';
+import { useSchedules } from '../../hooks/useSchedules';
+
 import { Value } from './Value';
 
 type ScheduleValueProps = {
@@ -15,11 +14,9 @@ type ScheduleValueProps = {
 };
 
 export function ScheduleValue({ value }: ScheduleValueProps) {
-  const payees = useSelector<State, QueriesState['payees']>(
-    state => state.queries.payees,
-  );
+  const payees = usePayees();
   const byId = getPayeesById(payees);
-  const { data: schedules } = SchedulesQuery.useQuery();
+  const { data: schedules } = useSchedules();
 
   return (
     <Value

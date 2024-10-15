@@ -1,35 +1,35 @@
-// @ts-strict-ignore
 import React, { type ReactNode, useEffect } from 'react';
-import { useSelector } from 'react-redux';
 
 import { media } from 'glamor';
 
-import { type State } from 'loot-core/client/state-types';
-import { type PrefsState } from 'loot-core/client/state-types/prefs';
-import * as Platform from 'loot-core/src/client/platform';
+import { isElectron } from 'loot-core/shared/environment';
 import { listen } from 'loot-core/src/platform/client/fetch';
 
 import { useActions } from '../../hooks/useActions';
-import { useLatestVersion, useIsOutdated } from '../../hooks/useLatestVersion';
-import { useSetThemeColor } from '../../hooks/useSetThemeColor';
+import { useFeatureFlag } from '../../hooks/useFeatureFlag';
+import { useGlobalPref } from '../../hooks/useGlobalPref';
+import { useIsOutdated, useLatestVersion } from '../../hooks/useLatestVersion';
+import { useMetadataPref } from '../../hooks/useMetadataPref';
 import { useResponsive } from '../../ResponsiveProvider';
 import { theme } from '../../style';
 import { tokens } from '../../tokens';
-import { Button } from '../common/Button';
-import { ExternalLink } from '../common/ExternalLink';
+import { Button } from '../common/Button2';
 import { Input } from '../common/Input';
+import { Link } from '../common/Link';
 import { Text } from '../common/Text';
 import { View } from '../common/View';
 import { FormField, FormLabel } from '../forms';
+import { MOBILE_NAV_HEIGHT } from '../mobile/MobileNavTabs';
 import { Page } from '../Page';
 import { useServerVersion } from '../ServerContext';
 
+import { Backups } from './Backups';
+import { BudgetTypeSettings } from './BudgetTypeSettings';
 import { EncryptionSettings } from './Encryption';
 import { ExperimentalFeatures } from './Experimental';
 import { ExportBudget } from './Export';
 import { FixSplits } from './FixSplits';
 import { FormatSettings } from './Format';
-import { GlobalSettings } from './Global';
 import { ResetCache, ResetSync } from './Reset';
 import { ThemeSettings } from './Themes';
 import { AdvancedToggle, Setting } from './UI';
@@ -59,27 +59,29 @@ function About() {
         })}`}
         data-vrt-mask
       >
-        <Text>Client version: v{window.Actual.ACTUAL_VERSION}</Text>
+        <Text>Client version: v{window.Actual?.ACTUAL_VERSION}</Text>
         <Text>Server version: {version}</Text>
         {isOutdated ? (
-          <ExternalLink
+          <Link
+            variant="external"
             to="https://actualbudget.org/docs/releases"
             linkColor="purple"
           >
             New version available: {latestVersion}
-          </ExternalLink>
+          </Link>
         ) : (
           <Text style={{ color: theme.noticeText, fontWeight: 600 }}>
             You’re up to date!
           </Text>
         )}
         <Text>
-          <ExternalLink
+          <Link
+            variant="external"
             to="https://actualbudget.org/docs/releases"
             linkColor="purple"
           >
             Release Notes
-          </ExternalLink>
+          </Link>
         </Text>
       </View>
     </Setting>
@@ -91,12 +93,8 @@ function IDName({ children }: { children: ReactNode }) {
 }
 
 function AdvancedAbout() {
-  const budgetId = useSelector<State, PrefsState['local']['id']>(
-    state => state.prefs.local.id,
-  );
-  const groupId = useSelector<State, PrefsState['local']['groupId']>(
-    state => state.prefs.local.groupId,
-  );
+  const [budgetId] = useMetadataPref('id');
+  const [groupId] = useMetadataPref('groupId');
 
   return (
     <Setting>
@@ -124,13 +122,8 @@ function AdvancedAbout() {
 }
 
 export function Settings() {
-  const floatingSidebar = useSelector<
-    State,
-    PrefsState['global']['floatingSidebar']
-  >(state => state.prefs.global.floatingSidebar);
-  const budgetName = useSelector<State, PrefsState['local']['budgetName']>(
-    state => state.prefs.local.budgetName,
-  );
+  const [floatingSidebar] = useGlobalPref('floatingSidebar');
+  const [budgetName] = useMetadataPref('budgetName');
 
   const { loadPrefs, closeBudget } = useActions();
 
@@ -145,16 +138,22 @@ export function Settings() {
 
   const { isNarrowWidth } = useResponsive();
 
-  useSetThemeColor(theme.mobileViewTheme);
   return (
     <Page
-      title="Settings"
+      header="Settings"
       style={{
-        backgroundColor: isNarrowWidth && theme.mobilePageBackground,
         marginInline: floatingSidebar && !isNarrowWidth ? 'auto' : 0,
+        paddingBottom: MOBILE_NAV_HEIGHT,
       }}
     >
-      <View style={{ flexShrink: 0, maxWidth: 530, gap: 30 }}>
+      <View
+        style={{
+          marginTop: 10,
+          flexShrink: 0,
+          maxWidth: 530,
+          gap: 30,
+        }}
+      >
         {isNarrowWidth && (
           <View
             style={{ gap: 10, flexDirection: 'row', alignItems: 'flex-end' }}
@@ -168,19 +167,16 @@ export function Settings() {
                 style={{ color: theme.buttonNormalDisabledText }}
               />
             </FormField>
-            <Button onClick={closeBudget}>Close Budget</Button>
+            <Button onPress={closeBudget}>Close Budget</Button>
           </View>
         )}
-
         <About />
-
-        {!Platform.isBrowser && <GlobalSettings />}
-
         <ThemeSettings />
         <FormatSettings />
         <EncryptionSettings />
+        {useFeatureFlag('reportBudget') && <BudgetTypeSettings />}
+        {isElectron() && <Backups />}
         <ExportBudget />
-
         <AdvancedToggle>
           <AdvancedAbout />
           <ResetCache />

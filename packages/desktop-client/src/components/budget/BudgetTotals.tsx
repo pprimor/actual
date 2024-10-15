@@ -1,11 +1,12 @@
-import React, { type ComponentProps, memo, useState } from 'react';
+import React, { type ComponentProps, memo, useRef, useState } from 'react';
+import { useTranslation, Trans } from 'react-i18next';
 
 import { SvgDotsHorizontalTriple } from '../../icons/v1';
 import { theme, styles } from '../../style';
-import { Button } from '../common/Button';
+import { Button } from '../common/Button2';
 import { Menu } from '../common/Menu';
+import { Popover } from '../common/Popover';
 import { View } from '../common/View';
-import { Tooltip } from '../tooltips';
 
 import { RenderMonths } from './RenderMonths';
 import { getScrollbarWidth } from './util';
@@ -23,7 +24,10 @@ export const BudgetTotals = memo(function BudgetTotals({
   expandAllCategories,
   collapseAllCategories,
 }: BudgetTotalsProps) {
+  const { t } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const triggerRef = useRef(null);
+
   return (
     <View
       data-testid="budget-totals"
@@ -52,13 +56,14 @@ export const BudgetTotals = memo(function BudgetTotals({
           WebkitUserSelect: 'none',
         }}
       >
-        <View style={{ flexGrow: '1' }}>Category</View>
+        <View style={{ flexGrow: '1' }}>
+          <Trans>Category</Trans>
+        </View>
         <Button
-          type="bare"
-          aria-label="Menu"
-          onClick={() => {
-            setMenuOpen(true);
-          }}
+          ref={triggerRef}
+          variant="bare"
+          aria-label={t('Menu')}
+          onPress={() => setMenuOpen(true)}
           style={{ color: 'currentColor', padding: 3 }}
         >
           <SvgDotsHorizontalTriple
@@ -66,44 +71,41 @@ export const BudgetTotals = memo(function BudgetTotals({
             height={15}
             style={{ color: theme.pageTextLight }}
           />
-          {menuOpen && (
-            <Tooltip
-              position="bottom-right"
-              width={200}
-              style={{ padding: 0 }}
-              onClose={() => {
-                setMenuOpen(false);
-              }}
-            >
-              <Menu
-                onMenuSelect={type => {
-                  if (type === 'toggle-visibility') {
-                    toggleHiddenCategories();
-                  } else if (type === 'expandAllCategories') {
-                    expandAllCategories();
-                  } else if (type === 'collapseAllCategories') {
-                    collapseAllCategories();
-                  }
-                  setMenuOpen(false);
-                }}
-                items={[
-                  {
-                    name: 'toggle-visibility',
-                    text: 'Toggle hidden categories',
-                  },
-                  {
-                    name: 'expandAllCategories',
-                    text: 'Expand all',
-                  },
-                  {
-                    name: 'collapseAllCategories',
-                    text: 'Collapse all',
-                  },
-                ]}
-              />
-            </Tooltip>
-          )}
         </Button>
+
+        <Popover
+          triggerRef={triggerRef}
+          isOpen={menuOpen}
+          onOpenChange={() => setMenuOpen(false)}
+          style={{ width: 200 }}
+        >
+          <Menu
+            onMenuSelect={type => {
+              if (type === 'toggle-visibility') {
+                toggleHiddenCategories();
+              } else if (type === 'expandAllCategories') {
+                expandAllCategories();
+              } else if (type === 'collapseAllCategories') {
+                collapseAllCategories();
+              }
+              setMenuOpen(false);
+            }}
+            items={[
+              {
+                name: 'toggle-visibility',
+                text: t('Toggle hidden categories'),
+              },
+              {
+                name: 'expandAllCategories',
+                text: t('Expand all'),
+              },
+              {
+                name: 'collapseAllCategories',
+                text: t('Collapse all'),
+              },
+            ]}
+          />
+        </Popover>
       </View>
       <RenderMonths component={MonthComponent} />
     </View>

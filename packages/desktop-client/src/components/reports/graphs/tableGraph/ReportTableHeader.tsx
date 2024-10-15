@@ -1,30 +1,43 @@
-// @ts-strict-ignore
-import React, { type UIEventHandler } from 'react';
-import { type RefProp } from 'react-spring';
+import React, { type RefObject, type UIEventHandler } from 'react';
+import { useTranslation } from 'react-i18next';
 
-import { type DataEntity } from 'loot-core/src/types/models/reports';
+import {
+  type balanceTypeOpType,
+  type IntervalEntity,
+} from 'loot-core/src/types/models/reports';
 
-import { styles, theme } from '../../../../style';
+import { theme } from '../../../../style';
+import { type CSSProperties } from '../../../../style/types';
 import { View } from '../../../common/View';
 import { Row, Cell } from '../../../table';
+import { ReportOptions } from '../../ReportOptions';
 
 type ReportTableHeaderProps = {
   groupBy: string;
-  interval?: DataEntity[];
-  balanceType: string;
-  headerScrollRef: RefProp<HTMLDivElement>;
+  interval: string;
+  data: IntervalEntity[];
+  balanceTypeOp: balanceTypeOpType;
+  headerScrollRef: RefObject<HTMLDivElement>;
   handleScroll: UIEventHandler<HTMLDivElement>;
   compact: boolean;
+  style?: CSSProperties;
+  compactStyle?: CSSProperties;
+  mode: string;
 };
 
 export function ReportTableHeader({
   groupBy,
   interval,
-  balanceType,
+  data,
+  balanceTypeOp,
   headerScrollRef,
   handleScroll,
   compact,
+  style,
+  compactStyle,
+  mode,
 }: ReportTableHeaderProps) {
+  const { t } = useTranslation();
   return (
     <Row
       collapsed={true}
@@ -35,6 +48,7 @@ export function ReportTableHeader({
         color: theme.tableHeaderText,
         backgroundColor: theme.tableHeaderBackground,
         fontWeight: 600,
+        ...style,
       }}
     >
       <View
@@ -51,60 +65,64 @@ export function ReportTableHeader({
       >
         <Cell
           style={{
-            width: 120,
+            width: compact ? 80 : 125,
             flexShrink: 0,
-            ...styles.tnum,
           }}
-          value={groupBy}
+          valueStyle={compactStyle}
+          value={
+            groupBy === 'Interval'
+              ? ReportOptions.intervalMap.get(interval)
+              : groupBy
+          }
         />
-        {interval
-          ? interval.map((header, index) => {
+        {mode === 'time'
+          ? data.map((header, index) => {
               return (
                 <Cell
                   style={{
-                    minWidth: compact ? 80 : 125,
-                    ...styles.tnum,
+                    minWidth: compact ? 50 : 85,
                   }}
+                  valueStyle={compactStyle}
                   key={index}
                   value={header.date}
                   width="flex"
                 />
               );
             })
-          : balanceType === 'Net' && (
+          : balanceTypeOp === 'totalTotals' && (
               <>
                 <Cell
                   style={{
-                    minWidth: compact ? 80 : 125,
-                    ...styles.tnum,
+                    minWidth: compact ? 50 : 85,
                   }}
-                  value="Deposits"
+                  valueStyle={compactStyle}
+                  value={t('Deposits')}
                   width="flex"
                 />
                 <Cell
                   style={{
-                    minWidth: compact ? 80 : 125,
-                    ...styles.tnum,
+                    minWidth: compact ? 50 : 85,
                   }}
-                  value="Payments"
+                  valueStyle={compactStyle}
+                  value={t('Payments')}
                   width="flex"
                 />
               </>
             )}
         <Cell
           style={{
-            minWidth: compact ? 80 : 125,
-            ...styles.tnum,
+            minWidth: compact ? 50 : 85,
           }}
-          value="Totals"
+          valueStyle={compactStyle}
+          value={t('Totals')}
           width="flex"
         />
         <Cell
           style={{
-            minWidth: compact ? 80 : 125,
-            ...styles.tnum,
+            minWidth: compact ? 50 : 85,
           }}
-          value="Average"
+          valueStyle={compactStyle}
+          value={t('Average')}
           width="flex"
         />
       </View>
